@@ -204,7 +204,7 @@ function showInstallFallback(error) {
     cancelId: 1
   }).then((result) => {
     if (result.response === 0) {
-      shell.openExternal("https://github.com/amaook/neo-ai-releases/releases/latest");
+      shell.openExternal("https://github.com/amaook/neoai/releases/latest");
     }
   }).catch((dialogError) => {
     console.error("neo install fallback dialog failed:", dialogError);

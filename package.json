@@ -33,7 +33,7 @@
       {
         "provider": "github",
         "owner": "amaook",
-        "repo": "neo-ai-releases",
+        "repo": "neoai",
         "releaseType": "release"
       }
     ],
