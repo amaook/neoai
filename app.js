@@ -675,6 +675,7 @@ let draftAgentAvatar = "";
 let agentProfileDirty = false;
 let lastEnvironmentData = null;
 let updateReadyToInstall = false;
+let updateManualInstallRequired = false;
 let updateStatusPollTimer = null;
 
 // ── 文件处理 ──
@@ -3935,10 +3936,11 @@ function renderUpdateProgress(data = {}) {
   }
 }
 
-function setUpdateButtonMode(readyToInstall) {
+function setUpdateButtonMode(readyToInstall, manualInstallRequired = false) {
   updateReadyToInstall = Boolean(readyToInstall);
+  updateManualInstallRequired = Boolean(manualInstallRequired);
   if (!els.checkUpdatesBtn) return;
-  els.checkUpdatesBtn.textContent = updateReadyToInstall ? "重启安装" : "检查更新";
+  els.checkUpdatesBtn.textContent = updateManualInstallRequired ? "打开下载页" : updateReadyToInstall ? "重启安装" : "检查更新";
 }
 
 function updateFeedbackType(data = {}) {
@@ -3964,7 +3966,7 @@ function startUpdateStatusPolling() {
 function applyUpdateStatus(data = {}, options = {}) {
   const message = data.message || (data.supported ? "已开始检查更新" : "检查更新只在安装包版本生效");
   renderUpdateProgress({ ...data, message });
-  setUpdateButtonMode(data.readyToInstall || data.status === "downloaded");
+  setUpdateButtonMode(data.readyToInstall || data.status === "downloaded" || data.status === "manual-install", data.manualInstallRequired);
   if (!options.silent || data.readyToInstall || data.status === "downloaded" || data.status === "error") {
     setUpdateFeedback(message, updateFeedbackType(data));
   }
@@ -3987,14 +3989,14 @@ async function refreshUpdateStatus(options = {}) {
 async function installAppUpdate() {
   if (!els.checkUpdatesBtn) return;
   els.checkUpdatesBtn.disabled = true;
-  setUpdateFeedback("正在重启安装更新...");
+  setUpdateFeedback(updateManualInstallRequired ? "正在打开下载页..." : "正在重启安装更新...");
   renderUpdateProgress({
     ok: true,
     supported: true,
-    status: "installing",
+    status: updateManualInstallRequired ? "manual-install" : "installing",
     progress: 100,
-    message: "正在重启安装更新",
-    detail: "正在退出 neo 并交给安装器"
+    message: updateManualInstallRequired ? "正在打开下载页" : "正在重启安装更新",
+    detail: updateManualInstallRequired ? "请下载最新版后手动覆盖安装" : "正在退出 neo 并交给安装器"
   });
   try {
     const response = await fetch("/api/desktop/install-update", { method: "POST" });

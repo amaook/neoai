@@ -1,12 +1,15 @@
 import { app, BrowserWindow, dialog, shell, Notification, Tray, Menu, nativeImage, screen } from "electron";
 import electronUpdater from "electron-updater";
+import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { startServer } from "../server.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const execFileAsync = promisify(execFile);
 
 let mainWindow;
 let serverHandle;
@@ -17,6 +20,8 @@ let currentWorkspaceRoot = "";
 let updateCheckInFlight = false;
 let updateStatusLabel = "检查更新";
 let updateReadyInfo = null;
+let updateInstallFallbackTimer = null;
+let macSignatureStatusPromise = null;
 let updateState = {
   ok: true,
   supported: false,
@@ -34,6 +39,7 @@ let updateState = {
 let autoUpdater;
 
 const appIconPath = path.join(__dirname, "../build/icon.png");
+const latestReleaseUrl = "https://github.com/amaook/neoai/releases/latest";
 
 const singleInstance = app.requestSingleInstanceLock();
 
@@ -177,19 +183,83 @@ function notifyUser(title, body) {
   }
 }
 
-function showInstallFallback(error) {
+function getAppBundlePath() {
+  const marker = ".app/Contents/";
+  const fromExecPath = process.execPath.includes(marker)
+    ? `${process.execPath.slice(0, process.execPath.indexOf(marker))}.app`
+    : "";
+  const appPath = app.getAppPath();
+  const fromAppPath = appPath.includes(marker)
+    ? `${appPath.slice(0, appPath.indexOf(marker))}.app`
+    : "";
+  return fromExecPath || fromAppPath || path.dirname(process.execPath);
+}
+
+async function getMacSignatureStatus() {
+  if (process.platform !== "darwin" || !app.isPackaged) {
+    return { autoInstallSupported: true, reason: "" };
+  }
+
+  if (!macSignatureStatusPromise) {
+    macSignatureStatusPromise = (async () => {
+      const appBundlePath = getAppBundlePath();
+      try {
+        const { stdout, stderr } = await execFileAsync("/usr/bin/codesign", ["-dv", "--verbose=4", appBundlePath]);
+        const output = `${stdout}\n${stderr}`;
+        const teamIdentifier = output.match(/TeamIdentifier=(.+)/)?.[1]?.trim() || "";
+        const adHocSigned = /Signature=adhoc/.test(output) || teamIdentifier === "not set";
+        if (!adHocSigned && teamIdentifier) return { autoInstallSupported: true, reason: "" };
+        return {
+          autoInstallSupported: false,
+          reason: "当前 neo 是本地临时签名版本，没有 Apple Developer ID 签名。macOS 不允许这种包自动替换安装，需要手动下载并覆盖安装。"
+        };
+      } catch {
+        return {
+          autoInstallSupported: false,
+          reason: "无法确认当前 neo 的 macOS 签名状态。为避免自动替换失败，请手动下载并覆盖安装。"
+        };
+      }
+    })();
+  }
+
+  return macSignatureStatusPromise;
+}
+
+function closeDesktopServer() {
+  const server = serverHandle?.server;
+  if (!server) return;
+  try { server.closeIdleConnections?.(); } catch {}
+  try { server.closeAllConnections?.(); } catch {}
+  try { server.close(); } catch {}
+}
+
+function prepareForQuit() {
+  isQuitting = true;
+  closeDesktopServer();
+}
+
+function openLatestRelease() {
+  shell.openExternal(latestReleaseUrl);
+}
+
+function showInstallFallback(error, options = {}) {
   isQuitting = false;
+  if (updateInstallFallbackTimer) {
+    clearTimeout(updateInstallFallbackTimer);
+    updateInstallFallbackTimer = null;
+  }
   const detail = [
     error?.message || "更新安装器没有在预期时间内启动。",
-    "这通常和 macOS 签名/权限有关。可以先打开下载页，手动安装最新版本。"
+    options.detail || "这通常和 macOS 签名/权限有关。可以先打开下载页，手动安装最新版本。"
   ].join("\n\n");
 
-  setUpdateStatus("自动安装未完成，请手动安装最新版", {
-    ok: false,
+  setUpdateStatus(options.manualOnly ? "新版已下载，请手动安装最新版" : "自动安装未完成，请手动安装最新版", {
+    ok: !options.manualOnly,
     supported: true,
-    status: "error",
+    status: options.manualOnly ? "manual-install" : "error",
     checking: false,
     readyToInstall: true,
+    manualInstallRequired: true,
     progress: 100,
     error: detail
   });
@@ -204,14 +274,33 @@ function showInstallFallback(error) {
     cancelId: 1
   }).then((result) => {
     if (result.response === 0) {
-      shell.openExternal("https://github.com/amaook/neoai/releases/latest");
+      openLatestRelease();
     }
   }).catch((dialogError) => {
     console.error("neo install fallback dialog failed:", dialogError);
   });
 }
 
-function startUpdateInstall() {
+async function startUpdateInstall() {
+  const signatureStatus = await getMacSignatureStatus();
+  if (!signatureStatus.autoInstallSupported) {
+    showInstallFallback(new Error(signatureStatus.reason), {
+      manualOnly: true,
+      detail: "打开下载页后下载最新版 dmg，退出 neo，再拖到 Applications 覆盖安装。"
+    });
+    openLatestRelease();
+    return {
+      ok: true,
+      supported: true,
+      status: "manual-install",
+      readyToInstall: true,
+      manualInstallRequired: true,
+      progress: 100,
+      message: "新版已下载，请手动安装最新版",
+      detail: signatureStatus.reason
+    };
+  }
+
   setUpdateStatus("正在重启安装更新...", {
     status: "installing",
     checking: false,
@@ -222,33 +311,47 @@ function startUpdateInstall() {
 
   setTimeout(() => {
     try {
-      isQuitting = true;
+      prepareForQuit();
       getAutoUpdater().quitAndInstall(false, true);
-      setTimeout(() => {
-        showInstallFallback(new Error("neo 没有在 5 秒内退出安装。"));
-      }, 5000);
+      updateInstallFallbackTimer = setTimeout(() => {
+        showInstallFallback(new Error("自动安装器仍未接手安装。"));
+      }, process.platform === "darwin" ? 120_000 : 30_000);
     } catch (error) {
       showInstallFallback(error);
     }
   }, 300);
+
+  return {
+    ok: true,
+    supported: true,
+    status: "installing",
+    readyToInstall: true,
+    progress: 100,
+    message: "正在重启安装更新"
+  };
 }
 
 async function showUpdateReadyDialog(info) {
   updateReadyInfo = info || updateReadyInfo;
   const version = info?.version ? ` ${info.version}` : "";
+  const signatureStatus = await getMacSignatureStatus();
+  const autoInstallSupported = signatureStatus.autoInstallSupported;
   showMainWindow();
   const result = await dialog.showMessageBox(mainWindow, {
     type: "info",
     title: "neo 更新已就绪",
     message: `neo 新版本${version} 已下载完成`,
-    detail: "现在重启会自动安装更新。也可以稍后退出软件时再安装。",
-    buttons: ["立即重启安装", "稍后"],
+    detail: autoInstallSupported
+      ? "现在重启会自动安装更新。也可以稍后退出软件时再安装。"
+      : `${signatureStatus.reason}\n\n请打开下载页，下载最新版 dmg 后手动覆盖安装。`,
+    buttons: [autoInstallSupported ? "立即重启安装" : "打开下载页", "稍后"],
     defaultId: 0,
     cancelId: 1
   });
 
   if (result.response === 0) {
-    startUpdateInstall();
+    if (autoInstallSupported) startUpdateInstall();
+    else openLatestRelease();
   }
 }
 
@@ -278,16 +381,7 @@ async function installDownloadedUpdate() {
     };
   }
 
-  startUpdateInstall();
-
-  return {
-    ok: true,
-    supported: true,
-    status: "installing",
-    readyToInstall: true,
-    progress: 100,
-    message: "正在重启安装更新"
-  };
+  return startUpdateInstall();
 }
 
 async function checkForUpdates(manual = false, options = {}) {
@@ -314,17 +408,19 @@ async function checkForUpdates(manual = false, options = {}) {
   }
 
   if (updateReadyInfo || updateState.readyToInstall) {
+    const signatureStatus = await getMacSignatureStatus();
     const ready = {
       ok: true,
       supported: true,
-      status: "downloaded",
+      status: signatureStatus.autoInstallSupported ? "downloaded" : "manual-install",
       checking: false,
       readyToInstall: true,
+      manualInstallRequired: !signatureStatus.autoInstallSupported,
       version: updateReadyInfo?.version || updateState.version || "",
       progress: 100,
       downloadPercent: 100,
-      message: "新版已下载，点击重启安装",
-      detail: "更新包已准备好"
+      message: signatureStatus.autoInstallSupported ? "新版已下载，点击重启安装" : "新版已下载，请手动安装最新版",
+      detail: signatureStatus.autoInstallSupported ? "更新包已准备好" : signatureStatus.reason
     };
     setUpdateStatus(ready.message, ready);
     if (interactive) {
@@ -503,21 +599,28 @@ function configureAutoUpdates() {
   });
 
   updater.on("update-downloaded", (info) => {
-    const version = info?.version ? ` ${info.version}` : "";
-    updateReadyInfo = info || updateReadyInfo;
-    setUpdateStatus(`新版${version} 已就绪，点击重启安装`, {
-      ok: true,
-      supported: true,
-      status: "downloaded",
-      checking: false,
-      readyToInstall: true,
-      version: info?.version || "",
-      progress: 100,
-      downloadPercent: 100,
-      detail: "更新包已下载完成"
-    });
-    notifyUser("neo 更新已就绪", "重启后即可安装新版本。");
-    showUpdateReadyDialog(info).catch((error) => console.error("neo update dialog failed:", error));
+    (async () => {
+      const version = info?.version ? ` ${info.version}` : "";
+      const signatureStatus = await getMacSignatureStatus();
+      updateReadyInfo = info || updateReadyInfo;
+      setUpdateStatus(
+        signatureStatus.autoInstallSupported ? `新版${version} 已就绪，点击重启安装` : `新版${version} 已下载，请手动安装`,
+        {
+          ok: true,
+          supported: true,
+          status: signatureStatus.autoInstallSupported ? "downloaded" : "manual-install",
+          checking: false,
+          readyToInstall: true,
+          manualInstallRequired: !signatureStatus.autoInstallSupported,
+          version: info?.version || "",
+          progress: 100,
+          downloadPercent: 100,
+          detail: signatureStatus.autoInstallSupported ? "更新包已下载完成" : signatureStatus.reason
+        }
+      );
+      notifyUser("neo 更新已就绪", signatureStatus.autoInstallSupported ? "重启后即可安装新版本。" : "请打开下载页手动安装最新版。");
+      showUpdateReadyDialog(info).catch((error) => console.error("neo update dialog failed:", error));
+    })().catch((error) => console.error("neo update downloaded handler failed:", error));
   });
 
   updater.on("error", (error) => {
@@ -663,6 +766,9 @@ app.on("activate", () => {
 app.on("window-all-closed", () => {});
 
 app.on("before-quit", () => {
-  isQuitting = true;
-  serverHandle?.server?.close();
+  prepareForQuit();
+});
+
+app.on("before-quit-for-update", () => {
+  prepareForQuit();
 });

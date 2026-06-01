@@ -1,6 +1,6 @@
 {
   "name": "neo",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "A local desktop AI agent with configurable API providers and models.",
   "author": "neo",
   "private": true,
