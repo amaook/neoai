@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>neo 桌宠</title>
+  <link rel="stylesheet" href="/pet.css" />
+</head>
+<body>
+  <div id="petRoot" class="state-idle">
+    <!-- 迷你聊天框 -->
+    <div id="petChat">
+      <div class="pet-chat-header">
+        <strong>neo</strong>
+        <button class="pet-chat-close" id="closeChatBtn" type="button">×</button>
+      </div>
+      <div id="petDropHint">释放文件添加到对话</div>
+      <div id="petMessages"></div>
+      <div id="petAttachmentBar"></div>
+      <form class="pet-chat-form" id="petChatForm">
+        <input id="petInput" placeholder="说点什么…" autocomplete="off" />
+        <button type="submit" id="petSendBtn">↑</button>
+      </form>
+      <div class="pet-resize-handle pet-resize-e" data-pet-resize="e"></div>
+      <div class="pet-resize-handle pet-resize-s" data-pet-resize="s"></div>
+      <div class="pet-resize-handle pet-resize-se" data-pet-resize="se"></div>
+    </div>
+
+    <!-- 状态气泡 -->
+    <div id="petBubble"></div>
+
+    <!-- 桌宠头像 -->
+    <div id="petAvatar">
+      <div id="petDefaultIcon">🤖</div>
+      <div id="petDragHandle" title="拖动"></div>
+    </div>
+  </div>
+
+  <script src="/pet.js"></script>
+</body>
+</html>

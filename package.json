@@ -1,6 +1,6 @@
 {
   "name": "neo",
-  "version": "0.8.6",
+  "version": "0.8.9",
   "description": "A local desktop AI agent with configurable API providers and models.",
   "author": "neo",
   "private": true,
@@ -11,7 +11,9 @@
     "dev": "node server.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "desktop": "electron .",
+    "ensure:electron": "node scripts/ensure-electron.cjs",
+    "desktop": "npm run ensure:electron && electron .",
+    "desktop:test": "npm run ensure:electron && NEO_DESKTOP_TEST=1 electron .",
     "package:dir": "electron-builder --dir --publish never",
     "package:mac": "electron-builder --mac dmg --publish never",
     "package:win": "electron-builder --win nsis zip --x64 --publish never",
@@ -44,7 +46,8 @@
       "tools/**/*",
       "build/icon.png",
       "server.mjs",
-      "package.json"
+      "package.json",
+      "schedules.json"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
@@ -80,5 +83,8 @@
     "pdf-parse": "^2.4.5",
     "read-excel-file": "^9.0.10",
     "write-excel-file": "^4.0.7"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas-win32-x64-msvc": "^0.1.80"
   }
 }

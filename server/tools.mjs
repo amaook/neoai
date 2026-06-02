@@ -310,8 +310,74 @@ export const agentTools = [
         required: ["command"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "invoke_skill",
+      description: "Delegate a complex sub-task to a specialized skill sub-agent that runs with its own focused system prompt and dedicated tool set, then returns the result. Use this when the task clearly maps to a skill domain and would benefit from a dedicated agent loop. Available skills: local-files (file read/write/search/export), spreadsheet-pro (Excel/CSV read/create/clean), document-reader (PDF/Word extraction), finance-tables (financial data processing), code-review (code analysis), web-browser (search/fetch/download), desktop-control (open apps/files/notify), local-command (shell commands).",
+      parameters: {
+        type: "object",
+        properties: {
+          skill: {
+            type: "string",
+            description: "Skill ID. One of: local-files, spreadsheet-pro, document-reader, finance-tables, code-review, web-browser, desktop-control, local-command"
+          },
+          task: {
+            type: "string",
+            description: "Detailed description of the task for the skill sub-agent to execute."
+          }
+        },
+        required: ["skill", "task"]
+      }
+    }
   }
 ];
+
+// ── 服务端技能定义（供 runSkillAgent 使用）────────────────────────────────────
+
+export const serverSkillDefs = {
+  "local-files": {
+    name: "本地文件助手",
+    tools: ["list_files", "read_file", "write_file", "export_image", "search_files"],
+    prompt: "你是本地文件助手子智能体。优先使用工作区相对路径；写入文件前确认路径清晰；用户要海报、封面、卡片、图片版结果时，先生成 HTML/SVG，再调用 export_image 导出真实 PNG/JPG；不要删除或覆盖用户未明确要求修改的文件。"
+  },
+  "spreadsheet-pro": {
+    name: "表格处理",
+    tools: ["read_excel_file", "create_excel_file", "clean_table_file", "clean_table_files"],
+    prompt: "你是表格处理子智能体。遇到 Excel/CSV 时先读取结构和字段，再处理；清洗表格默认另存新文件；批量任务优先使用 clean_table_files。"
+  },
+  "document-reader": {
+    name: "文档阅读",
+    tools: ["read_file"],
+    prompt: "你是文档阅读子智能体。先给关键信息和待办，再补充证据位置；内容过长时分段总结。"
+  },
+  "finance-tables": {
+    name: "财务表格",
+    tools: ["read_excel_file", "create_excel_file", "clean_table_file", "clean_table_files"],
+    prompt: "你是财务表格子智能体。处理金额、税费、合计和对账时必须严谨，主动说明口径、异常值和复核建议。"
+  },
+  "code-review": {
+    name: "代码审查",
+    tools: ["list_files", "read_file", "search_files"],
+    prompt: "你是代码审查子智能体。先列问题和风险，再给改法；重点关注 bug、安全、回归和测试缺口。"
+  },
+  "web-browser": {
+    name: "网页助手",
+    tools: ["search_web", "read_web_page", "download_url", "open_url"],
+    prompt: "你是网页助手子智能体。需要最新信息时先搜索或读取网页；引用网页内容时说明来源 URL；下载文件默认保存到工作区 Downloads。"
+  },
+  "desktop-control": {
+    name: "电脑操作",
+    tools: ["open_url", "open_desktop_app", "open_workspace_item", "show_desktop_notification"],
+    prompt: "你是电脑操作子智能体。可以打开应用、网页和本地文件，但不能声称已经点击或操作软件内部界面；涉及高风险动作必须先让用户确认。"
+  },
+  "local-command": {
+    name: "本地命令",
+    tools: ["run_command"],
+    prompt: "你是本地命令子智能体。执行命令前确认工作目录和影响范围；涉及删除、覆盖、权限修改等不可逆操作必须先向用户确认。"
+  }
+};
 
 export function toolsForSkillIds(enabledSkills) {
   if (!Array.isArray(enabledSkills)) return agentTools;
@@ -319,7 +385,13 @@ export function toolsForSkillIds(enabledSkills) {
   for (const skillId of enabledSkills) {
     for (const name of skillToolMap[skillId] || []) names.add(name);
   }
-  return agentTools.filter((tool) => names.has(tool.function?.name));
+  const filtered = agentTools.filter((tool) => names.has(tool.function?.name));
+  // 有启用技能时，向主智能体暴露 invoke_skill，让它可以委托子任务
+  if (enabledSkills.length > 0) {
+    const invokeSkillDef = agentTools.find((t) => t.function?.name === "invoke_skill");
+    if (invokeSkillDef && !filtered.includes(invokeSkillDef)) filtered.push(invokeSkillDef);
+  }
+  return filtered;
 }
 
 // ── 路径与工作区 ─────────────────────────────────────────────────────────────

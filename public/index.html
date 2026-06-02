@@ -35,7 +35,38 @@
             </span>
             <strong>新对话</strong>
           </button>
+          <button id="scheduleEntryBtn" class="nav-item" type="button">
+            <span class="nav-logo nav-logo-icon">⏱</span>
+            <strong>定时任务</strong>
+          </button>
         </nav>
+
+        <!-- 定时任务面板（在左侧栏内展开） -->
+        <section id="scheduleSidePanel" class="schedule-side-panel" style="display:none">
+          <div class="schedule-side-header">
+            <span>定时自动化</span>
+            <button id="newScheduleBtn" class="ghost-button small" type="button">＋ 新建</button>
+          </div>
+          <div id="scheduleForm" class="schedule-form" style="display:none">
+            <input id="scheduleNameInput" placeholder="任务名称，如：每日新闻" maxlength="60" />
+            <textarea id="schedulePromptInput" rows="3" placeholder="任务描述，如：搜索今天最重要的 AI 新闻，总结 5 条要点"></textarea>
+            <input id="scheduleExprInput" placeholder="调度时间：daily 09:00 / hourly / interval 30m" />
+            <small id="scheduleExprHint" class="schedule-expr-hint"></small>
+            <select id="scheduleProviderSelect"></select>
+            <input id="scheduleModelInput" placeholder="模型名称，如：deepseek-v4-flash" />
+            <input id="scheduleOutputInput" placeholder="输出文件：schedules/{date}-{name}.md" />
+            <div class="schedule-form-check">
+              <label><input type="checkbox" id="scheduleToolsCheck" /> 启用本地工具</label>
+              <label><input type="checkbox" id="scheduleNotifyCheck" checked /> 完成时通知</label>
+            </div>
+            <div class="schedule-form-actions">
+              <button id="saveScheduleBtn" class="primary-button small" type="button">保存</button>
+              <button id="cancelScheduleBtn" class="ghost-button small" type="button">取消</button>
+              <small id="scheduleFormFeedback"></small>
+            </div>
+          </div>
+          <div id="scheduleList" class="schedule-list"></div>
+        </section>
 
         <section class="history-pane">
           <div class="history-header">
@@ -53,7 +84,7 @@
             <span>⚙</span>
             <strong>设置</strong>
           </button>
-          <span id="appVersionBadge" class="app-version">v0.8.6</span>
+          <span id="appVersionBadge" class="app-version">v0.8.9</span>
         </div>
       </aside>
 
@@ -70,6 +101,7 @@
 
           <form id="chatForm" class="composer">
             <div id="attachmentBar" class="attachment-bar hidden"></div>
+            <div id="quoteBar" class="quote-bar hidden"></div>
             <textarea id="promptInput" rows="2" placeholder="输入你的问题或任务…" spellcheck="false"></textarea>
             <input type="file" id="fileInput" multiple hidden
               accept=".txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.go,.rs,.java,.c,.cpp,.h,.sh,.sql,.toml,.env,.pdf,.docx,.doc,.xlsx,.xls,.xlsm,image/*" />
@@ -158,6 +190,7 @@
           </form>
           <pre id="terminalOutput" class="terminal-output">等待命令</pre>
         </section>
+
       </aside>
     </div>
 
@@ -221,6 +254,7 @@
         <button class="settings-tab" data-settings-tab="skills" role="tab" aria-selected="false" type="button">技能库</button>
         <button class="settings-tab" data-settings-tab="memory" role="tab" aria-selected="false" type="button">记忆</button>
         <button class="settings-tab" data-settings-tab="archive" role="tab" aria-selected="false" type="button">归档</button>
+        <button class="settings-tab" data-settings-tab="petdex" role="tab" aria-selected="false" type="button">🐾 桌宠</button>
       </nav>
 
       <!-- ── 模型 ── -->
@@ -522,6 +556,73 @@
         <div class="pane-group">
           <div class="pane-group-title">已归档对话</div>
           <div id="archiveList" class="archive-list"></div>
+        </div>
+      </div>
+
+      <!-- ── 桌宠 (Petdex) ── -->
+      <div class="settings-pane" data-settings-pane="petdex">
+        <div class="pane-group">
+          <div class="pane-group-title pane-group-title-row">
+            <span>当前桌宠</span>
+            <button id="petdexResetBtn" class="ghost-button small" type="button">恢复默认 🤖</button>
+          </div>
+          <div id="petdexCurrentDisplay" class="petdex-current">
+            <canvas id="petdexCurrentCanvas" width="96" height="112"></canvas>
+            <div class="petdex-current-info">
+              <span id="petdexCurrentName">默认 (🤖 表情)</span>
+              <span id="petdexCurrentSlug" class="petdex-slug-label"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pane-group">
+          <div class="pane-group-title pane-group-title-row">
+            <span>Petdex 宠物库</span>
+            <div class="petdex-title-actions">
+              <button id="petdexRefreshBtn" class="ghost-button small" type="button">刷新源</button>
+              <a href="https://petdex.crafter.run" target="_blank" class="ghost-button small">打开网站 ↗</a>
+            </div>
+          </div>
+          <div class="petdex-search-row">
+            <input id="petdexSearch" placeholder="搜索宠物名称…" autocomplete="off" />
+            <select id="petdexSort" aria-label="宠物排序">
+              <option value="source">源站排序</option>
+              <option value="name">名称 A-Z</option>
+              <option value="slug">标识 A-Z</option>
+              <option value="kind">类型</option>
+              <option value="author">作者</option>
+            </select>
+            <button id="petdexSearchBtn" class="primary-button" type="button">搜索</button>
+          </div>
+          <div id="petdexStatus" class="petdex-status"></div>
+          <div id="petdexGrid" class="petdex-grid"></div>
+          <div class="petdex-pagination">
+            <button id="petdexPrevBtn" class="ghost-button small" type="button" disabled>← 上一页</button>
+            <span id="petdexPageLabel">第 1 页</span>
+            <button id="petdexNextBtn" class="ghost-button small" type="button">下一页 →</button>
+          </div>
+        </div>
+
+        <!-- 预览弹层 -->
+        <div id="petdexPreviewOverlay" class="petdex-preview-overlay hidden">
+          <div class="petdex-preview-card">
+            <canvas id="petdexPreviewCanvas" width="192" height="208"></canvas>
+            <div class="petdex-preview-info">
+              <strong id="petdexPreviewName"></strong>
+              <span id="petdexPreviewSlugLabel" class="petdex-slug-label"></span>
+              <div id="petdexPreviewStates" class="petdex-preview-states" role="group" aria-label="状态预览">
+                <button class="ghost-button small active" data-petdex-state="idle" type="button">待机</button>
+                <button class="ghost-button small" data-petdex-state="thinking" type="button">思考</button>
+                <button class="ghost-button small" data-petdex-state="working" type="button">执行</button>
+                <button class="ghost-button small" data-petdex-state="done" type="button">完成</button>
+                <button class="ghost-button small" data-petdex-state="error" type="button">错误</button>
+              </div>
+              <div class="petdex-preview-actions">
+                <button id="petdexUseBtn" class="primary-button" type="button">✅ 使用此宠物</button>
+                <button id="petdexClosePreviewBtn" class="ghost-button" type="button">关闭</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

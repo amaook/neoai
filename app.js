@@ -1,14 +1,39 @@
 const qwenModelPresets = [
   "qwen3.7-max",
+  "qwen3.7-max-2026-05-20",
+  "qwen3.7-max-preview",
+  "qwen3.7-max-2026-05-17",
+  "qwen3.7-plus",
+  "qwen3.7-plus-2026-05-26",
+  "qwen3.6-max-preview",
   "qwen3.6-plus",
+  "qwen3.6-plus-2026-04-02",
   "qwen3.6-flash",
+  "qwen3.6-flash-2026-04-16",
   "qwen3.6-35b-a3b",
   "qwen3.5-plus",
+  "qwen3.5-plus-2026-02-15",
   "qwen3.5-flash",
+  "qwen3.5-flash-2026-02-23",
   "qwen3.5-397b-a17b",
   "qwen3.5-122b-a10b",
   "qwen3.5-35b-a3b",
   "qwen3.5-27b",
+  "qwen3-max",
+  "qwen3-max-2026-01-23",
+  "qwen3-max-preview",
+  "qwen3-max-2025-09-23",
+  "qwen3-next-80b-a3b-thinking",
+  "qwen3-next-80b-a3b-instruct",
+  "qwen3-235b-a22b-thinking-2507",
+  "qwen3-235b-a22b-instruct-2507",
+  "qwen3-30b-a3b-thinking-2507",
+  "qwen3-30b-a3b-instruct-2507",
+  "qwen3-235b-a22b",
+  "qwen3-32b",
+  "qwen3-30b-a3b",
+  "qwen3-14b",
+  "qwen3-8b",
   "qwen3-vl-plus",
   "qwen3-vl-flash",
   "qwen-vl-ocr",
@@ -16,16 +41,31 @@ const qwenModelPresets = [
   "qwen3.5-omni-plus",
   "qwen3.5-omni-flash",
   "qwen3-coder-plus",
+  "qwen3-coder-plus-2025-07-22",
   "qwen3-coder-flash",
+  "qwen3-coder-flash-2025-07-28",
+  "qwen-coder-plus",
+  "qwen-coder-turbo",
   "qwen-max",
+  "qwen-max-latest",
   "qwen-plus",
+  "qwen-plus-latest",
+  "qwen-plus-2024-12-20",
   "qwen-flash",
+  "qwen-flash-2025-07-28",
   "qwen-turbo",
   "qwen-long",
+  "qwen-long-latest",
+  "qwen-long-2025-01-25",
+  "qwq-plus",
+  "qwen-math-plus",
+  "qwen-math-plus-latest",
+  "qwen-math-turbo",
   "kimi-k2.6",
   "deepseek-v4-pro",
   "deepseek-v4-flash",
   "glm-5.1",
+  "MiniMax-M2.5",
   "MiniMax-M2.7",
   "mimo-v2.5-pro"
 ];
@@ -512,8 +552,10 @@ const memoryContentLimit = 1200;
 const storageKey = "neo-ai-state-v2";
 const legacyStorageKey = "neo-ai-state-v1";
 const onboardingStorageKey = "neo-ai-onboarding-complete-v1";
+const agentProfileChannelName = "neo-agent-profile-v1";
 const chatRequestTimeoutMs = 70000;
 const apiTestTimeoutMs = 35000;
+let agentProfileChannel = null;
 
 const els = {
   appShell: document.querySelector(".app-shell"),
@@ -659,7 +701,25 @@ const els = {
   recheckEnvironmentBtn: document.querySelector("#recheckEnvironmentBtn"),
   environmentSummary: document.querySelector("#environmentSummary"),
   environmentList: document.querySelector("#environmentList"),
-  environmentOutput: document.querySelector("#environmentOutput")
+  environmentOutput: document.querySelector("#environmentOutput"),
+  // 定时任务
+  scheduleEntryBtn: document.querySelector("#scheduleEntryBtn"),
+  scheduleSidePanel: document.querySelector("#scheduleSidePanel"),
+  newScheduleBtn: document.querySelector("#newScheduleBtn"),
+  scheduleForm: document.querySelector("#scheduleForm"),
+  scheduleNameInput: document.querySelector("#scheduleNameInput"),
+  schedulePromptInput: document.querySelector("#schedulePromptInput"),
+  scheduleExprInput: document.querySelector("#scheduleExprInput"),
+  scheduleExprHint: document.querySelector("#scheduleExprHint"),
+  scheduleProviderSelect: document.querySelector("#scheduleProviderSelect"),
+  scheduleModelInput: document.querySelector("#scheduleModelInput"),
+  scheduleOutputInput: document.querySelector("#scheduleOutputInput"),
+  scheduleToolsCheck: document.querySelector("#scheduleToolsCheck"),
+  scheduleNotifyCheck: document.querySelector("#scheduleNotifyCheck"),
+  saveScheduleBtn: document.querySelector("#saveScheduleBtn"),
+  cancelScheduleBtn: document.querySelector("#cancelScheduleBtn"),
+  scheduleFormFeedback: document.querySelector("#scheduleFormFeedback"),
+  scheduleList: document.querySelector("#scheduleList")
 };
 
 let state = loadState();
@@ -720,6 +780,34 @@ function readAsDataUrl(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function loadImageDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("头像图片读取失败"));
+    image.src = dataUrl;
+  });
+}
+
+async function createAvatarDataUrl(dataUrl, size = 256) {
+  if (!dataUrl) throw new Error("缺少头像图片");
+  const image = await loadImageDataUrl(dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("当前环境无法处理头像图片");
+
+  const sourceSize = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
+  const sourceX = Math.max(0, ((image.naturalWidth || image.width) - sourceSize) / 2);
+  const sourceY = Math.max(0, ((image.naturalHeight || image.height) - sourceSize) / 2);
+  ctx.clearRect(0, 0, size, size);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+  return canvas.toDataURL("image/png");
 }
 
 async function readPdf(file) {
@@ -957,7 +1045,7 @@ function openAICompatibleSupportsImageInput(provider = {}, model = "") {
   if (providerText.includes("api.openai.com")) return /gpt-4o|gpt-4\.1|gpt-5|o3|o4/.test(String(model).toLowerCase());
   if (providerText.includes("dashscope") || providerText.includes("qwen") || providerText.includes("百炼")) {
     if (/^qwen3-coder|^qwen-coder|coder/.test(normalizedModel)) return false;
-    if (/^qwen3\.(6|5)-(plus|flash)(-|$)/.test(normalizedModel)) return true;
+    if (/^qwen3\.(7|6|5)-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen3-vl-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen-vl|^qvq|omni/.test(normalizedModel)) return true;
   }
@@ -1098,7 +1186,9 @@ function defaultState() {
     systemPrompt: generatedSystemPrompt("coder", "direct"),
     conversations: [firstConversation],
     activeConversationId: firstConversation.id,
-    layout: { sidebarWidth: 300, rightWidth: 300 }
+    layout: { sidebarWidth: 300, rightWidth: 300 },
+    petdexSlug: "",
+    petdexPet: null
   };
 }
 
@@ -1137,6 +1227,21 @@ function normalizeAppearance(appearance = {}) {
   };
 }
 
+function normalizePetdexPetSelection(value, fallbackSlug = "") {
+  const slug = String(value?.slug || fallbackSlug || "").trim();
+  if (!slug) return null;
+  const spritesheetUrl = String(value?.spritesheetUrl || "").trim();
+  return {
+    slug,
+    displayName: String(value?.displayName || value?.name || slug).trim(),
+    kind: String(value?.kind || "").trim(),
+    submittedBy: String(value?.submittedBy || "").trim(),
+    spritesheetUrl,
+    petJsonUrl: String(value?.petJsonUrl || "").trim(),
+    zipUrl: String(value?.zipUrl || "").trim()
+  };
+}
+
 function normalizeSavedState(saved = {}) {
   const base = defaultState();
   try {
@@ -1160,6 +1265,7 @@ function normalizeSavedState(saved = {}) {
       sidebarOpen: saved.sidebarOpen !== false,
       workspaceOpen: saved.workspaceOpen !== false,
       workspaceTab: ["tasks", "artifacts", "files", "terminal"].includes(saved.workspaceTab) ? saved.workspaceTab : "tasks",
+      schedulePanelOpen: Boolean(saved.schedulePanelOpen),
       workspacePath: saved.workspacePath || ".",
       onboardingComplete: Boolean(saved.onboardingComplete || localStorage.getItem(onboardingStorageKey) === "1"),
       agentName: saved.agentName || "neo",
@@ -1181,7 +1287,9 @@ function normalizeSavedState(saved = {}) {
       layout: {
         sidebarWidth: clamp(Number(saved.layout?.sidebarWidth || saved.sidebarWidth || 300), 220, 430),
         rightWidth: clamp(Number(saved.layout?.rightWidth || saved.rightWidth || 300), 260, 440)
-      }
+      },
+      petdexSlug: typeof saved.petdexSlug === "string" ? saved.petdexSlug : "",
+      petdexPet: normalizePetdexPetSelection(saved.petdexPet, typeof saved.petdexSlug === "string" ? saved.petdexSlug : "")
     };
   } catch {
     return base;
@@ -2345,6 +2453,69 @@ function setAgentProfileFeedback(text, type = "") {
   els.agentProfileFeedback.className = `save-feedback ${type}`;
 }
 
+function getAgentProfileChannel() {
+  if (agentProfileChannel || typeof BroadcastChannel === "undefined") return agentProfileChannel;
+  try {
+    agentProfileChannel = new BroadcastChannel(agentProfileChannelName);
+  } catch {
+    agentProfileChannel = null;
+  }
+  return agentProfileChannel;
+}
+
+function broadcastAgentProfile(source = "main") {
+  const channel = getAgentProfileChannel();
+  if (!channel) return;
+  channel.postMessage({
+    type: "agent-profile",
+    source,
+    agentName: state.agentName || "neo",
+    agentAvatar: state.agentAvatar || ""
+  });
+}
+
+function applyExternalAgentProfile(profile = {}) {
+  const nextName = typeof profile.agentName === "string" ? (profile.agentName.trim() || "neo") : state.agentName;
+  const nextAvatar = typeof profile.agentAvatar === "string" ? profile.agentAvatar : state.agentAvatar;
+  if ((state.agentName || "neo") === nextName && (state.agentAvatar || "") === nextAvatar) return;
+
+  state.agentName = nextName;
+  state.agentAvatar = nextAvatar || "";
+  draftAgentName = state.agentName;
+  draftAgentAvatar = state.agentAvatar;
+  agentProfileDirty = false;
+  saveState();
+  renderMessages();
+  updateAvatarPreview(state.agentAvatar);
+  if (agentNameInput) agentNameInput.value = state.agentName;
+  setAgentProfileFeedback("已同步桌宠形象", "ok");
+}
+
+function setupAgentProfileSync() {
+  const channel = getAgentProfileChannel();
+  if (channel) {
+    channel.onmessage = (event) => {
+      const data = event.data || {};
+      if (data.type === "agent-profile" && data.source !== "main") {
+        applyExternalAgentProfile(data);
+      }
+    };
+  }
+
+  window.addEventListener("storage", (event) => {
+    if (event.key !== storageKey && event.key !== legacyStorageKey) return;
+    try {
+      const nextState = JSON.parse(event.newValue || "{}");
+      applyExternalAgentProfile({
+        agentName: nextState.agentName,
+        agentAvatar: nextState.agentAvatar
+      });
+    } catch {
+      // 忽略无法解析的旧状态。
+    }
+  });
+}
+
 function markAgentProfileDirty() {
   agentProfileDirty = true;
   setAgentProfileFeedback("有未保存的形象更改");
@@ -2357,6 +2528,7 @@ function saveAgentProfile() {
   saveState();
   renderMessages();
   updateAvatarPreview(state.agentAvatar);
+  broadcastAgentProfile("main");
   setAgentProfileFeedback("已保存", "ok");
   flashButton(els.saveAgentProfileBtn, "已保存");
 }
@@ -2755,6 +2927,59 @@ function syncStateFromUI() {
   state.enabledSkills = normalizeEnabledSkills(state.enabledSkills);
 }
 
+function isAvatarChangeIntent(prompt = "") {
+  const text = String(prompt || "").trim();
+  if (!text) return false;
+  const hasAvatarWord = /(头像|头图|形象|avatar|profile\s*(picture|photo)?)/i.test(text);
+  const hasSetAction = /(设为|设置为|设成|设置成|改成|换成|换为|更换|替换|当成|作为|新头像|做.*头像|当.*头像|用.+(做|当|作为)|change|set|use|replace)/i.test(text);
+  const targetsAgent = /(你|你的|neo|助手|智能体|AI|机器人|agent|bot)/i.test(text);
+  const refersToAttachment = /(这张|这个|这幅|这|图片|照片|图|附件|刚才|上传)/i.test(text);
+  return hasAvatarWord && hasSetAction && (targetsAgent || refersToAttachment);
+}
+
+async function applyAvatarChangeFromAttachment(prompt = "", attachments = []) {
+  if (!isAvatarChangeIntent(prompt)) return null;
+  const imageAttachment = [...attachments].reverse().find((attachment) => attachment.kind === "image" && attachment.dataUrl);
+  if (!imageAttachment) return null;
+
+  const avatarDataUrl = await createAvatarDataUrl(imageAttachment.dataUrl);
+  state.agentAvatar = avatarDataUrl;
+  draftAgentAvatar = avatarDataUrl;
+  draftAgentName = state.agentName || "neo";
+  agentProfileDirty = false;
+  saveState();
+  updateAvatarPreview(avatarDataUrl);
+  broadcastAgentProfile("main");
+  setAgentProfileFeedback("已通过对话更新头像", "ok");
+  return {
+    path: imageAttachment.path || imageAttachment.name || "图片附件",
+    content: `已换好了，我现在就用这张图做头像。\n\n来源：${imageAttachment.path || imageAttachment.name || "刚才上传的图片"}`
+  };
+}
+
+function commitLocalAssistantResponse(conversation, content, requestPatch = {}) {
+  conversation.messages.push({
+    role: "assistant",
+    content,
+    request: {
+      provider: "neo 本地动作",
+      protocol: "local",
+      model: "profile-avatar",
+      endpoint: "local://profile/avatar",
+      thinking: "",
+      calledAt: nowIso(),
+      ...requestPatch
+    },
+    usage: null
+  });
+  updateConversationSummary(conversation);
+  conversation.updatedAt = nowIso();
+  saveState();
+  renderConversations();
+  renderMessages();
+  renderWorkspacePanel();
+}
+
 /** 处理附件导入并记录事件，返回 importedAttachments */
 async function prepareAttachments(attachmentsToSend, provider, model) {
   if (!attachmentsToSend.length) return [];
@@ -2802,7 +3027,7 @@ function buildRequestMessages(conversation, prompt, importedAttachments, provide
 
 /** 调用 /api/chat 并返回 data */
 /** SSE 流式调用 /api/chat，边接收边更新气泡，返回最终 data 对象 */
-async function callChatApi(provider, model, messages, { onDelta, onToolStart, onToolEnd } = {}) {
+async function callChatApi(provider, model, messages, { onDelta, onToolStart, onToolEnd, onSkillStart, onSkillStep, onSkillEnd } = {}) {
   const controller = new AbortController();
   activeChatController = controller;
 
@@ -2874,6 +3099,12 @@ async function callChatApi(provider, model, messages, { onDelta, onToolStart, on
           onToolStart?.(event.name, event.args);
         } else if (event.type === "tool_end") {
           onToolEnd?.(event.name, event.result);
+        } else if (event.type === "skill_start") {
+          onSkillStart?.(event.skill, event.task);
+        } else if (event.type === "skill_step") {
+          onSkillStep?.(event.skill, event.phase, event.name, event.args, event.result);
+        } else if (event.type === "skill_end") {
+          onSkillEnd?.(event.skill, event.ok, event.steps, event.content);
         } else if (event.type === "done") {
           finalData = { ok: true, ...event };
           delete finalData.type;
@@ -2945,6 +3176,7 @@ async function sendPrompt(event) {
   const conversation = activeConversation();
   els.promptInput.value = "";
   setBusy(true);
+  notifyPet("thinking");
   setStatus(attachmentsToSend.length ? "正在处理附件" : "正在连接 API", "准备发送请求", "running");
   addTaskEvent("任务开始", prompt || `处理 ${attachmentsToSend.length} 个附件`, "running");
 
@@ -2953,17 +3185,26 @@ async function sendPrompt(event) {
   }, 10000);
 
   try {
-    const route = resolveModelRoute(attachmentsToSend);
+    const localAvatarRequest = isAvatarChangeIntent(prompt) && attachmentsToSend.some((attachment) => attachment.kind === "image");
+    const route = localAvatarRequest
+      ? { provider: activeProvider(), model: effectiveModel(), auto: false, kind: "local-avatar", label: "本地头像" }
+      : resolveModelRoute(attachmentsToSend);
     const { provider, model } = route;
-    addTaskEvent(
-      route.auto ? "自动切换模型" : "确认模型",
-      `${route.label} → ${provider.name || "未命名供应商"} · ${model}`,
-      "complete"
-    );
+    if (localAvatarRequest) {
+      addTaskEvent("识别头像指令", "将使用上传图片更新 neo 头像，不调用模型。", "running");
+    } else {
+      addTaskEvent(
+        route.auto ? "自动切换模型" : "确认模型",
+        `${route.label} → ${provider.name || "未命名供应商"} · ${model}`,
+        "complete"
+      );
+    }
 
     const importedAttachments = await prepareAttachments(attachmentsToSend, provider, model);
     pendingAttachments = [];
     renderAttachmentChips();
+
+    const avatarChange = await applyAvatarChangeFromAttachment(prompt, importedAttachments);
 
     const capturedMemories = captureMemoryCandidates(prompt, importedAttachments);
     if (capturedMemories) {
@@ -2972,6 +3213,13 @@ async function sendPrompt(event) {
     }
 
     commitUserMessage(conversation, prompt, importedAttachments);
+
+    if (avatarChange) {
+      addTaskEvent("头像已更新", avatarChange.path, "complete");
+      commitLocalAssistantResponse(conversation, avatarChange.content);
+      setStatus("头像已更新", "已保存到 neo 形象设置", "complete");
+      return;
+    }
 
     const messages = buildRequestMessages(conversation, prompt, importedAttachments, provider, model);
     setStatus("正在生成回复", `${route.label} · ${provider.name} · ${model}`, "running");
@@ -2999,10 +3247,25 @@ async function sendPrompt(event) {
         }
       },
       onToolStart(name, args) {
+        notifyPet("working");
         addTaskEvent(`工具调用: ${name}`, JSON.stringify(args || {}).slice(0, 120), "running");
       },
       onToolEnd(name, result) {
         addTaskEvent(`工具完成: ${name}`, result?.ok ? (result.path || "成功") : (result?.error || "失败"), result?.ok ? "complete" : "error");
+      },
+      onSkillStart(skill, task) {
+        const skillNames = { "local-files": "本地文件助手", "spreadsheet-pro": "表格处理", "document-reader": "文档阅读", "finance-tables": "财务表格", "code-review": "代码审查", "web-browser": "网页助手", "desktop-control": "电脑操作", "local-command": "本地命令" };
+        addTaskEvent(`▶ 技能子智能体: ${skillNames[skill] || skill}`, (task || "").slice(0, 120), "running");
+      },
+      onSkillStep(skill, phase, name, args, result) {
+        if (phase === "start") {
+          addTaskEvent(`  ↳ ${name}`, JSON.stringify(args || {}).slice(0, 80), "running");
+        } else if (phase === "end") {
+          addTaskEvent(`  ✓ ${name}`, result?.ok ? (result.path || "完成") : (result?.error || "失败"), result?.ok ? "complete" : "error");
+        }
+      },
+      onSkillEnd(skill, ok, steps, content) {
+        addTaskEvent(`◼ 技能完成: ${skill}`, ok ? ((content || "").slice(0, 80) || "已完成") : "技能执行失败", ok ? "complete" : "error");
       }
     });
 
@@ -3010,9 +3273,11 @@ async function sendPrompt(event) {
     conversation.messages.pop();
     await commitAssistantResponse(conversation, data, provider, model);
 
+    notifyPet("done");
     addTaskEvent("任务完成", "已生成回复", "complete");
     setStatus("运行完成", "任务已成功完成", "complete");
   } catch (error) {
+    notifyPet("error");
     addTaskEvent("任务失败", error.message, "error");
     conversation.messages.push({ role: "error", content: error.message });
     conversation.updatedAt = nowIso();
@@ -3376,14 +3641,35 @@ function renderToolSteps() {
     return;
   }
 
+  const skillNames = { "local-files": "本地文件助手", "spreadsheet-pro": "表格处理", "document-reader": "文档阅读", "finance-tables": "财务表格", "code-review": "代码审查", "web-browser": "网页助手", "desktop-control": "电脑操作", "local-command": "本地命令" };
+
   for (const [index, step] of steps.entries()) {
     const item = document.createElement("article");
-    item.className = "tool-step";
-    item.innerHTML = `
-      <strong>${index + 1}. ${escapeHtml(formatToolName(step.name))}</strong>
-      <small>${escapeHtml(safeJsonPreview(step.args || {}, 220))}</small>
-      <pre>${escapeHtml(safeJsonPreview(step.result || {}, 900))}</pre>
-    `;
+
+    if (step.name === "invoke_skill") {
+      // 技能调用：特殊渲染，显示子步骤
+      const skillId = step.args?.skill || "";
+      const skillLabel = skillNames[skillId] || skillId;
+      const subSteps = Array.isArray(step.result?.steps) ? step.result.steps : [];
+      const ok = step.result?.ok !== false;
+      item.className = `tool-step tool-step-skill${ok ? "" : " tool-step-error"}`;
+      const subStepsHtml = subSteps.length
+        ? subSteps.map((sub) => `<div class="skill-sub-step"><span>${escapeHtml(formatToolName(sub.name))}</span><small>${escapeHtml(safeJsonPreview(sub.result || {}, 200))}</small></div>`).join("")
+        : "<small style='opacity:.5'>（无子步骤）</small>";
+      item.innerHTML = `
+        <strong>${index + 1}. ▶ 技能子智能体：${escapeHtml(skillLabel)}</strong>
+        <small>${escapeHtml((step.args?.task || "").slice(0, 160))}</small>
+        <div class="skill-sub-steps">${subStepsHtml}</div>
+        <pre>${escapeHtml((step.result?.content || "").slice(0, 600))}</pre>
+      `;
+    } else {
+      item.className = "tool-step";
+      item.innerHTML = `
+        <strong>${index + 1}. ${escapeHtml(formatToolName(step.name))}</strong>
+        <small>${escapeHtml(safeJsonPreview(step.args || {}, 220))}</small>
+        <pre>${escapeHtml(safeJsonPreview(step.result || {}, 900))}</pre>
+      `;
+    }
     els.toolSteps.append(item);
   }
 }
@@ -4229,6 +4515,7 @@ document.querySelectorAll("[data-settings-tab]").forEach((tab) => {
     if (target === "skills") renderSkillLibrary();
     if (target === "memory") renderMemoryList();
     if (target === "archive") renderArchiveList();
+    if (target === "petdex") initPetdexPanel();
   });
 });
 els.saveSettingsBtn.addEventListener("click", updateSelectedProviderFromForm);
@@ -4379,10 +4666,14 @@ avatarFileInput?.addEventListener("change", (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (ev) => {
-    draftAgentAvatar = ev.target.result;
-    updateAvatarPreview(draftAgentAvatar);
-    markAgentProfileDirty();
+  reader.onload = async (ev) => {
+    try {
+      draftAgentAvatar = await createAvatarDataUrl(ev.target.result);
+      updateAvatarPreview(draftAgentAvatar);
+      markAgentProfileDirty();
+    } catch (error) {
+      setAgentProfileFeedback(error.message || "头像图片处理失败", "error");
+    }
   };
   reader.readAsDataURL(file);
 });
@@ -4408,4 +4699,730 @@ async function initializeApp() {
   checkEnvironment();
 }
 
+// ── 桌宠状态通知 ──────────────────────────────────────────────────
+function notifyPet(state) {
+  // 非阻塞，忽略错误（桌宠不在或服务未启动时静默失败）
+  fetch("/api/pet/state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state })
+  }).catch(() => {});
+}
+
+setupAgentProfileSync();
 initializeApp();
+
+// ════════════════════════════════════════════════════════════════
+// 定时自动化
+// ════════════════════════════════════════════════════════════════
+
+let scheduleEditingId = null; // 当前正在编辑的任务 id（null = 新建）
+
+// ── API ──────────────────────────────────────────────────────────
+
+async function fetchSchedules() {
+  try {
+    const res = await fetch("/api/schedules");
+    const data = await res.json();
+    return data.schedules || [];
+  } catch { return []; }
+}
+
+async function apiCreateSchedule(body) {
+  const res = await fetch("/api/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return res.json();
+}
+
+async function apiUpdateSchedule(id, body) {
+  const res = await fetch(`/api/schedules/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return res.json();
+}
+
+async function apiDeleteSchedule(id) {
+  const res = await fetch(`/api/schedules/${id}`, { method: "DELETE" });
+  return res.json();
+}
+
+async function apiRunSchedule(id) {
+  const res = await fetch(`/api/schedules/${id}/run`, { method: "POST" });
+  return res.json();
+}
+
+// ── 渲染 ─────────────────────────────────────────────────────────
+
+function scheduleStatusLabel(s) {
+  if (!s.enabled) return "已暂停";
+  if (s.lastResult?.ok === false) return "上次失败";
+  if (s.lastRun) return `上次 ${relativeTime(s.lastRun)}`;
+  return "未运行";
+}
+
+async function renderScheduleList() {
+  if (!els.scheduleList) return;
+  const schedules = await fetchSchedules();
+  if (!schedules.length) {
+    els.scheduleList.innerHTML = `<div class="schedule-empty">暂无定时任务<br><small>点击"＋ 新建"创建第一个</small></div>`;
+    return;
+  }
+  els.scheduleList.innerHTML = "";
+  for (const s of schedules) {
+    const item = document.createElement("div");
+    item.className = `schedule-item${s.enabled ? "" : " schedule-disabled"}`;
+    const statusClass = s.lastResult?.ok === false ? "schedule-status-error" : s.lastRun ? "schedule-status-ok" : "";
+    item.innerHTML = `
+      <div class="schedule-item-main">
+        <strong class="schedule-item-name">${escapeHtml(s.name)}</strong>
+        <span class="schedule-item-expr">${escapeHtml(s.scheduleLabel || s.schedule)}</span>
+        <span class="schedule-item-status ${statusClass}">${escapeHtml(scheduleStatusLabel(s))}</span>
+      </div>
+      <div class="schedule-item-actions">
+        <button class="schedule-btn" data-action="run" data-id="${s.id}" title="立即运行">▶</button>
+        <button class="schedule-btn" data-action="toggle" data-id="${s.id}" data-enabled="${s.enabled}" title="${s.enabled ? "暂停" : "启用"}">${s.enabled ? "⏸" : "⏵"}</button>
+        <button class="schedule-btn" data-action="edit" data-id="${s.id}" title="编辑">✎</button>
+        <button class="schedule-btn schedule-btn-del" data-action="delete" data-id="${s.id}" title="删除">✕</button>
+      </div>
+    `;
+    els.scheduleList.append(item);
+  }
+
+  els.scheduleList.addEventListener("click", handleScheduleItemAction, { once: true });
+  // Re-attach after re-render
+}
+
+async function handleScheduleItemAction(event) {
+  const btn = event.target.closest("[data-action]");
+  if (!btn) { renderScheduleList(); return; }
+  const { action, id, enabled } = btn.dataset;
+
+  if (action === "run") {
+    btn.textContent = "…";
+    btn.disabled = true;
+    const res = await apiRunSchedule(id);
+    await renderScheduleList();
+    if (!res.ok) alert(`运行失败：${res.error || "未知错误"}`);
+  } else if (action === "toggle") {
+    await apiUpdateSchedule(id, { enabled: enabled === "true" ? false : true });
+    await renderScheduleList();
+  } else if (action === "edit") {
+    const schedules = await fetchSchedules();
+    const s = schedules.find((x) => x.id === id);
+    if (s) openScheduleForm(s);
+  } else if (action === "delete") {
+    if (!confirm(`确认删除定时任务「${btn.closest(".schedule-item")?.querySelector(".schedule-item-name")?.textContent || id}」？`)) { renderScheduleList(); return; }
+    await apiDeleteSchedule(id);
+    await renderScheduleList();
+  } else {
+    renderScheduleList();
+  }
+}
+
+// ── 表单 ─────────────────────────────────────────────────────────
+
+function openScheduleForm(existing = null) {
+  scheduleEditingId = existing?.id || null;
+  if (els.scheduleNameInput) els.scheduleNameInput.value = existing?.name || "";
+  if (els.schedulePromptInput) els.schedulePromptInput.value = existing?.prompt || "";
+  if (els.scheduleExprInput) els.scheduleExprInput.value = existing?.schedule || "daily 09:00";
+  if (els.scheduleModelInput) els.scheduleModelInput.value = existing?.model || "";
+  if (els.scheduleOutputInput) els.scheduleOutputInput.value = existing?.outputFile || "schedules/{date}-{name}.md";
+  if (els.scheduleToolsCheck) els.scheduleToolsCheck.checked = Boolean(existing?.enableTools);
+  if (els.scheduleNotifyCheck) els.scheduleNotifyCheck.checked = existing?.notify !== false;
+  if (els.scheduleFormFeedback) els.scheduleFormFeedback.textContent = "";
+  updateScheduleExprHint();
+  // Fill provider select
+  populateScheduleProviderSelect(existing?.providerId);
+  if (els.scheduleForm) els.scheduleForm.style.display = "";
+  els.scheduleNameInput?.focus();
+}
+
+function populateScheduleProviderSelect(selectedId) {
+  if (!els.scheduleProviderSelect) return;
+  els.scheduleProviderSelect.innerHTML = "";
+  for (const p of state.providers || []) {
+    if (!p.apiKey) continue; // 没有 key 的跳过
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name || p.id;
+    if (p.id === selectedId) opt.selected = true;
+    els.scheduleProviderSelect.append(opt);
+  }
+  if (!selectedId && els.scheduleProviderSelect.options.length) {
+    // 默认选当前活跃供应商
+    const activeId = state.activeProviderId || "";
+    const opt = [...els.scheduleProviderSelect.options].find((o) => o.value === activeId);
+    if (opt) opt.selected = true;
+  }
+}
+
+function updateScheduleExprHint() {
+  if (!els.scheduleExprHint || !els.scheduleExprInput) return;
+  const expr = els.scheduleExprInput.value.trim();
+  const hints = {
+    "daily": "每天指定时刻，例：daily 09:00",
+    "weekly": "每周指定星期，例：weekly 1 09:00（0=周日）",
+    "hourly": "每小时整点执行",
+    "interval": "固定间隔，例：interval 30m（分钟）/ interval 2h（小时）"
+  };
+  const type = expr.split(" ")[0].toLowerCase();
+  // 尝试解析并展示下次运行时间
+  const labels = {
+    "daily 09:00": "每天上午 9:00",
+    "daily 08:30": "每天上午 8:30",
+    "hourly": "每小时整点",
+    "weekly 1 09:00": "每周一上午 9:00",
+    "interval 30m": "每 30 分钟",
+    "interval 1h": "每 1 小时",
+    "interval 2h": "每 2 小时"
+  };
+  els.scheduleExprHint.textContent = labels[expr.toLowerCase()] || hints[type] || "支持：daily HH:MM / weekly N HH:MM / hourly / interval Nm/Nh";
+}
+
+async function saveScheduleForm() {
+  const name = els.scheduleNameInput?.value.trim();
+  const prompt = els.schedulePromptInput?.value.trim();
+  const schedule = els.scheduleExprInput?.value.trim();
+  const providerId = els.scheduleProviderSelect?.value;
+  const model = els.scheduleModelInput?.value.trim();
+  const outputFile = els.scheduleOutputInput?.value.trim() || "schedules/{date}-{name}.md";
+  const enableTools = Boolean(els.scheduleToolsCheck?.checked);
+  const notify = Boolean(els.scheduleNotifyCheck?.checked);
+
+  if (!name) { if (els.scheduleFormFeedback) els.scheduleFormFeedback.textContent = "请填写名称"; return; }
+  if (!prompt) { if (els.scheduleFormFeedback) els.scheduleFormFeedback.textContent = "请填写任务描述"; return; }
+  if (!schedule) { if (els.scheduleFormFeedback) els.scheduleFormFeedback.textContent = "请填写调度时间"; return; }
+  if (!providerId) { if (els.scheduleFormFeedback) els.scheduleFormFeedback.textContent = "请选择供应商（需先填写 API Key）"; return; }
+
+  if (els.scheduleFormFeedback) els.scheduleFormFeedback.textContent = "保存中…";
+  if (els.saveScheduleBtn) els.saveScheduleBtn.disabled = true;
+
+  try {
+    const body = { name, prompt, schedule, providerId, model, outputFile, enableTools, notify };
+    const res = scheduleEditingId
+      ? await apiUpdateSchedule(scheduleEditingId, body)
+      : await apiCreateSchedule(body);
+
+    if (!res.ok) throw new Error(res.error || "保存失败");
+    closeScheduleForm();
+    await renderScheduleList();
+  } catch (err) {
+    if (els.scheduleFormFeedback) els.scheduleFormFeedback.textContent = err.message;
+  } finally {
+    if (els.saveScheduleBtn) els.saveScheduleBtn.disabled = false;
+  }
+}
+
+function closeScheduleForm() {
+  scheduleEditingId = null;
+  if (els.scheduleForm) els.scheduleForm.style.display = "none";
+  if (els.scheduleFormFeedback) els.scheduleFormFeedback.textContent = "";
+}
+
+// ── 面板开关 ──────────────────────────────────────────────────────
+
+function toggleSchedulePanel() {
+  const open = els.scheduleSidePanel?.style.display === "none";
+  if (els.scheduleSidePanel) els.scheduleSidePanel.style.display = open ? "" : "none";
+  if (els.scheduleEntryBtn) els.scheduleEntryBtn.classList.toggle("active", open);
+  state.schedulePanelOpen = open;
+  if (open) renderScheduleList();
+}
+
+// ── 事件绑定 ──────────────────────────────────────────────────────
+
+els.scheduleEntryBtn?.addEventListener("click", toggleSchedulePanel);
+els.newScheduleBtn?.addEventListener("click", () => openScheduleForm());
+els.saveScheduleBtn?.addEventListener("click", saveScheduleForm);
+els.cancelScheduleBtn?.addEventListener("click", closeScheduleForm);
+els.scheduleExprInput?.addEventListener("input", updateScheduleExprHint);
+
+// 初始化：恢复面板开关状态
+if (state.schedulePanelOpen && els.scheduleSidePanel) {
+  els.scheduleSidePanel.style.display = "";
+  els.scheduleEntryBtn?.classList.add("active");
+  renderScheduleList();
+}
+
+// ═══════════════════════════════════════════════════
+// Petdex 桌宠设置面板
+// ═══════════════════════════════════════════════════
+
+const PETDEX_PAGE_SIZE = 30;
+const PETDEX_API = "/api/petdex/pets";
+const PETDEX_LEGACY_SPRITE_BASE = "https://petdex.crafter.run/pets";
+const PETDEX_DEFAULT_ANIMATION = { row: 0, frames: 6, durationMs: 1100 };
+const PETDEX_STATE_ANIMATIONS = {
+  idle:      { row: 0, frames: 6, durationMs: 1100 },
+  listening: { row: 3, frames: 4, durationMs: 700 },
+  thinking:  { row: 8, frames: 6, durationMs: 1030 },
+  working:   { row: 7, frames: 6, durationMs: 820 },
+  done:      { row: 4, frames: 5, durationMs: 840 },
+  error:     { row: 5, frames: 8, durationMs: 1220 }
+};
+
+let petdexAllPets = [];       // 全量宠物列表
+let petdexFiltered = [];      // 过滤后列表
+let petdexPage = 0;
+let petdexLoaded = false;
+let petdexLoading = false;
+let petdexSortMode = "source";
+let petdexCurrentSlug = "";   // 当前使用中的 slug
+let petdexPreviewSlug = "";   // 预览中的 slug
+let petdexPreviewPet = null;   // 预览中的宠物
+let petdexPreviewState = "idle";
+let petdexPreviewTimer = null;
+let petdexCurrentTimer = null;
+
+// ── 精灵图动画辅助 ──────────────────────────────────
+
+const petdexImgCache = {};    // slug → HTMLImageElement
+
+function normalizePetdexSourcePet(value, sourceIndex = 0) {
+  const slug = String(value?.slug || "").trim();
+  if (!slug) return null;
+  return {
+    slug,
+    displayName: String(value.displayName || value.name || slug).trim(),
+    kind: String(value.kind || "").trim(),
+    submittedBy: String(value.submittedBy || "").trim(),
+    spritesheetUrl: String(value.spritesheetUrl || "").trim(),
+    petJsonUrl: String(value.petJsonUrl || "").trim(),
+    zipUrl: String(value.zipUrl || "").trim(),
+    sourceIndex: Number.isFinite(value.sourceIndex) ? value.sourceIndex : sourceIndex,
+    animation: value.animation || PETDEX_DEFAULT_ANIMATION
+  };
+}
+
+function findPetdexPet(slug) {
+  if (!slug) return null;
+  return petdexAllPets.find((pet) => pet.slug === slug) || null;
+}
+
+function getSelectedPetdexPet() {
+  const slug = state.petdexSlug || "";
+  if (!slug) return null;
+  return findPetdexPet(slug) || normalizePetdexSourcePet(state.petdexPet, -1) || normalizePetdexSourcePet({ slug }, -1);
+}
+
+function getPetdexPetName(pet) {
+  return pet?.displayName || pet?.name || pet?.slug || "";
+}
+
+function getPetdexSpriteUrl(petOrSlug) {
+  const pet = typeof petOrSlug === "string" ? findPetdexPet(petOrSlug) : petOrSlug;
+  const slug = typeof petOrSlug === "string" ? petOrSlug : pet?.slug;
+  return pet?.spritesheetUrl || (slug ? `${PETDEX_LEGACY_SPRITE_BASE}/${slug}/spritesheet.webp` : "");
+}
+
+function getPetdexAnimation(state = "idle") {
+  const animation = PETDEX_STATE_ANIMATIONS[state] || PETDEX_DEFAULT_ANIMATION;
+  return {
+    row: Number.isFinite(animation.row) ? animation.row : PETDEX_DEFAULT_ANIMATION.row,
+    frames: Number.isFinite(animation.frames) ? animation.frames : PETDEX_DEFAULT_ANIMATION.frames,
+    durationMs: Number.isFinite(animation.durationMs) ? animation.durationMs : PETDEX_DEFAULT_ANIMATION.durationMs
+  };
+}
+
+function petdexSearchText(pet) {
+  return [
+    pet.slug,
+    getPetdexPetName(pet),
+    pet.kind,
+    pet.submittedBy
+  ].join(" ").toLowerCase();
+}
+
+function loadPetdexSprite(petOrSlug) {
+  const spriteUrl = getPetdexSpriteUrl(petOrSlug);
+  if (!spriteUrl) return Promise.reject(new Error("缺少精灵图地址"));
+  if (petdexImgCache[spriteUrl]) return Promise.resolve(petdexImgCache[spriteUrl]);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const fallbackUrl = spriteUrl.includes(PETDEX_LEGACY_SPRITE_BASE) && spriteUrl.endsWith(".webp")
+      ? spriteUrl.replace(/\.webp$/, ".png")
+      : "";
+    img.onload = () => { petdexImgCache[spriteUrl] = img; resolve(img); };
+    img.onerror = () => {
+      if (fallbackUrl && img.src !== fallbackUrl) {
+        img.src = fallbackUrl;
+        return;
+      }
+      reject(new Error("精灵图加载失败"));
+    };
+    img.src = spriteUrl;
+  });
+}
+
+/**
+ * 在 canvas 上播放 petdex 精灵图的 idle 动画 (第 0 行)。
+ * 返回 clearInterval 用的 timerId。
+ */
+function animatePetdexIdle(canvas, img, animation = PETDEX_DEFAULT_ANIMATION) {
+  const ctx = canvas.getContext("2d");
+  // petdex 标准：9 行 × 8 列，每格 192×208
+  const cols = 8;
+  const rows = 9;
+  const frameW = img.naturalWidth / cols;
+  const frameH = img.naturalHeight / rows;
+  const row = Math.max(0, Math.min(rows - 1, Number(animation.row || 0)));
+  const idleFrames = Math.max(1, Math.min(cols, Number(animation.frames || PETDEX_DEFAULT_ANIMATION.frames)));
+  const frameMs = Number(animation.durationMs || PETDEX_DEFAULT_ANIMATION.durationMs) / idleFrames;
+  let frame = 0;
+  const draw = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(
+      img,
+      frame * frameW, row * frameH, frameW, frameH,
+      0, 0, canvas.width, canvas.height
+    );
+    frame = (frame + 1) % idleFrames;
+  };
+  draw();
+  return setInterval(draw, Math.max(80, frameMs));
+}
+
+// ── 当前桌宠预览 ────────────────────────────────────
+
+function renderPetdexCurrentDisplay() {
+  const canvas = document.getElementById("petdexCurrentCanvas");
+  const nameEl = document.getElementById("petdexCurrentName");
+  const slugEl = document.getElementById("petdexCurrentSlug");
+  if (!canvas) return;
+
+  if (petdexCurrentTimer) { clearInterval(petdexCurrentTimer); petdexCurrentTimer = null; }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const pet = getSelectedPetdexPet();
+  const slug = pet?.slug || "";
+  petdexCurrentSlug = slug;
+
+  if (!slug) {
+    if (nameEl) nameEl.textContent = "默认 (🤖 表情)";
+    if (slugEl) slugEl.textContent = "";
+    return;
+  }
+
+  if (nameEl) nameEl.textContent = getPetdexPetName(pet);
+  if (slugEl) slugEl.textContent = slug;
+
+  loadPetdexSprite(pet).then((img) => {
+    canvas.width = 96; canvas.height = 112;
+    petdexCurrentTimer = animatePetdexIdle(canvas, img, getPetdexAnimation("idle"));
+  }).catch(() => {
+    if (nameEl) nameEl.textContent = `${slug} (图片加载失败)`;
+  });
+}
+
+// ── 网格卡片 ────────────────────────────────────────
+
+function buildPetdexCards(pets) {
+  const grid = document.getElementById("petdexGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  if (!pets.length) {
+    grid.innerHTML = '<p style="color:#888;font-size:12px">没有找到匹配的宠物</p>';
+    return;
+  }
+
+  pets.forEach((pet) => {
+    const card = document.createElement("div");
+    card.className = "petdex-card" + (pet.slug === petdexCurrentSlug ? " selected" : "");
+    card.dataset.slug = pet.slug;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 48;
+    canvas.height = 56;
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "petdex-card-name";
+    nameEl.title = getPetdexPetName(pet);
+    nameEl.textContent = getPetdexPetName(pet);
+
+    const metaEl = document.createElement("span");
+    metaEl.className = "petdex-card-meta";
+    metaEl.title = [pet.kind, pet.submittedBy].filter(Boolean).join(" · ");
+    metaEl.textContent = pet.kind || pet.submittedBy || pet.slug;
+
+    card.appendChild(canvas);
+    card.appendChild(nameEl);
+    card.appendChild(metaEl);
+    grid.appendChild(card);
+
+    // 异步加载精灵图缩略图（只画第一帧）
+    loadPetdexSprite(pet).then((img) => {
+      const ctx = canvas.getContext("2d");
+      const frameW = img.naturalWidth / 8;
+      const frameH = img.naturalHeight / 9;
+      ctx.drawImage(img, 0, 0, frameW, frameH, 0, 0, canvas.width, canvas.height);
+    }).catch(() => {
+      const ctx = canvas.getContext("2d");
+      ctx.font = "20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("🐾", 24, 34);
+    });
+
+    card.addEventListener("click", () => openPetdexPreview(pet));
+  });
+}
+
+// ── 分页渲染 ────────────────────────────────────────
+
+function renderPetdexPage() {
+  const start = petdexPage * PETDEX_PAGE_SIZE;
+  const pageItems = petdexFiltered.slice(start, start + PETDEX_PAGE_SIZE);
+  buildPetdexCards(pageItems);
+
+  const pageLabel = document.getElementById("petdexPageLabel");
+  const prevBtn = document.getElementById("petdexPrevBtn");
+  const nextBtn = document.getElementById("petdexNextBtn");
+  const totalPages = Math.max(1, Math.ceil(petdexFiltered.length / PETDEX_PAGE_SIZE));
+
+  if (pageLabel) pageLabel.textContent = `第 ${petdexPage + 1} / ${totalPages} 页`;
+  if (prevBtn) prevBtn.disabled = petdexPage === 0;
+  if (nextBtn) nextBtn.disabled = (petdexPage + 1) >= totalPages;
+
+  const statusEl = document.getElementById("petdexStatus");
+  if (statusEl && !petdexLoading) statusEl.textContent = `共 ${petdexFiltered.length} / ${petdexAllPets.length} 只宠物`;
+}
+
+// ── 搜索过滤 ────────────────────────────────────────
+
+function sortPetdexPets(pets) {
+  const collator = new Intl.Collator("zh-Hans", { numeric: true, sensitivity: "base" });
+  const sorted = [...pets];
+  if (petdexSortMode === "name") {
+    sorted.sort((a, b) => collator.compare(getPetdexPetName(a), getPetdexPetName(b)) || collator.compare(a.slug, b.slug));
+  } else if (petdexSortMode === "slug") {
+    sorted.sort((a, b) => collator.compare(a.slug, b.slug));
+  } else if (petdexSortMode === "kind") {
+    sorted.sort((a, b) => collator.compare(a.kind || "未分类", b.kind || "未分类") || collator.compare(getPetdexPetName(a), getPetdexPetName(b)));
+  } else if (petdexSortMode === "author") {
+    sorted.sort((a, b) => collator.compare(a.submittedBy || "未知", b.submittedBy || "未知") || collator.compare(getPetdexPetName(a), getPetdexPetName(b)));
+  } else {
+    sorted.sort((a, b) => (a.sourceIndex ?? 0) - (b.sourceIndex ?? 0));
+  }
+  return sorted;
+}
+
+function applyPetdexFilter(q, options = {}) {
+  const query = (q || "").trim().toLowerCase();
+  const filtered = query
+    ? petdexAllPets.filter((pet) => petdexSearchText(pet).includes(query))
+    : [...petdexAllPets];
+  petdexFiltered = sortPetdexPets(filtered);
+  if (!options.keepPage) petdexPage = 0;
+  const totalPages = Math.max(1, Math.ceil(petdexFiltered.length / PETDEX_PAGE_SIZE));
+  petdexPage = Math.min(petdexPage, totalPages - 1);
+  renderPetdexPage();
+}
+
+// ── 预览弹层 ────────────────────────────────────────
+
+function openPetdexPreview(pet) {
+  petdexPreviewPet = normalizePetdexSourcePet(pet, -1);
+  petdexPreviewSlug = petdexPreviewPet?.slug || "";
+  petdexPreviewState = "idle";
+  const overlay = document.getElementById("petdexPreviewOverlay");
+  const canvas = document.getElementById("petdexPreviewCanvas");
+  const nameEl = document.getElementById("petdexPreviewName");
+  const slugEl = document.getElementById("petdexPreviewSlugLabel");
+  if (!overlay || !canvas) return;
+
+  if (petdexPreviewTimer) { clearInterval(petdexPreviewTimer); petdexPreviewTimer = null; }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (nameEl) nameEl.textContent = getPetdexPetName(petdexPreviewPet);
+  if (slugEl) slugEl.textContent = [petdexPreviewSlug, petdexPreviewPet?.kind].filter(Boolean).join(" · ");
+  updatePetdexPreviewStateButtons();
+  overlay.classList.remove("hidden");
+
+  renderPetdexPreviewAnimation();
+}
+
+function updatePetdexPreviewStateButtons() {
+  document.querySelectorAll("[data-petdex-state]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.petdexState === petdexPreviewState);
+  });
+}
+
+function renderPetdexPreviewAnimation() {
+  const canvas = document.getElementById("petdexPreviewCanvas");
+  const nameEl = document.getElementById("petdexPreviewName");
+  if (!canvas || !petdexPreviewPet) return;
+
+  if (petdexPreviewTimer) { clearInterval(petdexPreviewTimer); petdexPreviewTimer = null; }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  loadPetdexSprite(petdexPreviewPet).then((img) => {
+    canvas.width = 192; canvas.height = 208;
+    petdexPreviewTimer = animatePetdexIdle(canvas, img, getPetdexAnimation(petdexPreviewState));
+  }).catch(() => {
+    const ctx2 = canvas.getContext("2d");
+    ctx2.font = "40px sans-serif";
+    ctx2.textAlign = "center";
+    ctx2.fillText("❌", 96, 120);
+    if (nameEl) nameEl.textContent = `${petdexPreviewSlug} — 加载失败`;
+  });
+}
+
+function closePetdexPreview() {
+  if (petdexPreviewTimer) { clearInterval(petdexPreviewTimer); petdexPreviewTimer = null; }
+  petdexPreviewPet = null;
+  petdexPreviewState = "idle";
+  const overlay = document.getElementById("petdexPreviewOverlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+// ── 应用选中的宠物 ──────────────────────────────────
+
+function applyPetdexSlug(petOrSlug) {
+  const pet = typeof petOrSlug === "string"
+    ? (findPetdexPet(petOrSlug) || normalizePetdexSourcePet({ slug: petOrSlug }, -1))
+    : normalizePetdexSourcePet(petOrSlug, -1);
+  state.petdexSlug = pet?.slug || "";
+  state.petdexPet = pet ? {
+    slug: pet.slug,
+    displayName: getPetdexPetName(pet),
+    kind: pet.kind || "",
+    submittedBy: pet.submittedBy || "",
+    spritesheetUrl: pet.spritesheetUrl || "",
+    petJsonUrl: pet.petJsonUrl || "",
+    zipUrl: pet.zipUrl || ""
+  } : null;
+  saveState();
+  // 通知 pet 窗口更新
+  try {
+    const ch = new BroadcastChannel("neo-agent-profile-v1");
+    ch.postMessage({ type: "petdex-selection", slug: state.petdexSlug, pet: state.petdexPet });
+    ch.close();
+  } catch {}
+  renderPetdexCurrentDisplay();
+  // 刷新网格选中状态
+  document.querySelectorAll(".petdex-card").forEach((c) => {
+    c.classList.toggle("selected", c.dataset.slug === state.petdexSlug);
+  });
+}
+
+// ── 从 Petdex 源加载宠物列表 ─────────────────────
+
+function setPetdexControlsLoading(loading) {
+  const searchBtn = document.getElementById("petdexSearchBtn");
+  const refreshBtn = document.getElementById("petdexRefreshBtn");
+  if (searchBtn) searchBtn.disabled = loading;
+  if (refreshBtn) refreshBtn.disabled = loading;
+}
+
+async function loadPetdexPets({ refresh = false } = {}) {
+  const statusEl = document.getElementById("petdexStatus");
+  const searchInput = document.getElementById("petdexSearch");
+  if (statusEl) statusEl.textContent = "正在从 Petdex 源加载宠物列表…";
+  petdexLoading = true;
+  setPetdexControlsLoading(true);
+  try {
+    const res = await fetch(`${PETDEX_API}${refresh ? "?refresh=1" : ""}`);
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || "Petdex 源加载失败");
+    petdexAllPets = Array.isArray(data.pets)
+      ? data.pets.map(normalizePetdexSourcePet).filter(Boolean)
+      : [];
+    petdexLoaded = true;
+    applyPetdexFilter(searchInput?.value || "");
+    const sourceHint = data.stale ? " · 使用缓存" : "";
+    if (statusEl) statusEl.textContent = `共 ${petdexFiltered.length} / ${petdexAllPets.length} 只宠物${sourceHint}`;
+  } catch (err) {
+    petdexLoaded = false;
+    petdexAllPets = [];
+    petdexFiltered = [];
+    renderPetdexPage();
+    if (statusEl) statusEl.textContent = `加载失败：${err.message}`;
+  } finally {
+    petdexLoading = false;
+    setPetdexControlsLoading(false);
+  }
+}
+
+// ── 面板初始化（每次切换到桌宠 tab 时调用）─────────
+
+async function initPetdexPanel() {
+  renderPetdexCurrentDisplay();
+
+  // 绑定事件（第一次调用时注册，重复调用无副作用）
+  const searchInput = document.getElementById("petdexSearch");
+  const searchBtn = document.getElementById("petdexSearchBtn");
+  const sortSelect = document.getElementById("petdexSort");
+  const refreshBtn = document.getElementById("petdexRefreshBtn");
+  const prevBtn = document.getElementById("petdexPrevBtn");
+  const nextBtn = document.getElementById("petdexNextBtn");
+  const resetBtn = document.getElementById("petdexResetBtn");
+  const useBtn = document.getElementById("petdexUseBtn");
+  const closePreviewBtn = document.getElementById("petdexClosePreviewBtn");
+
+  if (sortSelect) sortSelect.value = petdexSortMode;
+  if (searchBtn && !searchBtn._bound) {
+    searchBtn._bound = true;
+    searchBtn.addEventListener("click", () => applyPetdexFilter(searchInput?.value));
+    searchInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") applyPetdexFilter(searchInput.value); });
+    searchInput?.addEventListener("input", () => applyPetdexFilter(searchInput.value));
+  }
+  if (sortSelect && !sortSelect._bound) {
+    sortSelect._bound = true;
+    sortSelect.addEventListener("change", () => {
+      petdexSortMode = sortSelect.value || "source";
+      applyPetdexFilter(searchInput?.value || "");
+    });
+  }
+  if (refreshBtn && !refreshBtn._bound) {
+    refreshBtn._bound = true;
+    refreshBtn.addEventListener("click", () => loadPetdexPets({ refresh: true }));
+  }
+  if (prevBtn && !prevBtn._bound) {
+    prevBtn._bound = true;
+    prevBtn.addEventListener("click", () => { if (petdexPage > 0) { petdexPage--; renderPetdexPage(); } });
+  }
+  if (nextBtn && !nextBtn._bound) {
+    nextBtn._bound = true;
+    nextBtn.addEventListener("click", () => {
+      const total = Math.ceil(petdexFiltered.length / PETDEX_PAGE_SIZE);
+      if (petdexPage + 1 < total) { petdexPage++; renderPetdexPage(); }
+    });
+  }
+  if (resetBtn && !resetBtn._bound) {
+    resetBtn._bound = true;
+    resetBtn.addEventListener("click", () => { applyPetdexSlug(""); closePetdexPreview(); });
+  }
+  if (useBtn && !useBtn._bound) {
+    useBtn._bound = true;
+    useBtn.addEventListener("click", () => {
+      applyPetdexSlug(petdexPreviewPet || petdexPreviewSlug);
+      closePetdexPreview();
+    });
+  }
+  if (closePreviewBtn && !closePreviewBtn._bound) {
+    closePreviewBtn._bound = true;
+    closePreviewBtn.addEventListener("click", closePetdexPreview);
+  }
+  document.querySelectorAll("[data-petdex-state]").forEach((button) => {
+    if (button._bound) return;
+    button._bound = true;
+    button.addEventListener("click", () => {
+      petdexPreviewState = button.dataset.petdexState || "idle";
+      updatePetdexPreviewStateButtons();
+      renderPetdexPreviewAnimation();
+    });
+  });
+  // 点击遮罩关闭
+  const overlay = document.getElementById("petdexPreviewOverlay");
+  if (overlay && !overlay._bound) {
+    overlay._bound = true;
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closePetdexPreview(); });
+  }
+
+  if (!petdexLoaded && !petdexLoading) {
+    await loadPetdexPets();
+  } else {
+    applyPetdexFilter(searchInput?.value || "", { keepPage: true });
+  }
+}

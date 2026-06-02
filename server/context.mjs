@@ -9,6 +9,12 @@ const __dirname = path.dirname(__filename);
 // server/ 目录的父目录即项目根目录
 export const rootDir = path.dirname(__dirname);
 
+function boundedNumber(value, fallback, min, max) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
+
 export const ctx = {
   // 运行时路径
   publicDir: path.join(rootDir, "public"),
@@ -20,6 +26,7 @@ export const ctx = {
 
   // 超时配置
   defaultApiTimeoutMs: Number(process.env.NEO_AI_API_TIMEOUT_MS || 60000),
+  maxToolRounds: boundedNumber(process.env.NEO_AI_MAX_TOOL_ROUNDS || process.env.NEO_MAX_TOOL_ROUNDS, 25, 1, 60),
 
   // Electron 注入的桌面端回调（web 模式下为 null）
   selectWorkspaceRoot: null,

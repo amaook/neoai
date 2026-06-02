@@ -1,0 +1,484 @@
+/* pet.css — 桌宠窗口样式 */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --pet-size: 72px;
+  --chat-w: 350px;
+  --chat-h: 450px;
+  --pet-display-w: 72px;
+  --pet-display-h: 72px;
+  --pet-margin: 8px;
+  --pet-gap: 10px;
+  --radius: 20px;
+  --bg: rgba(255,255,255,0.88);
+  --text: #1a1a1a;
+  --muted: #888;
+  --line: rgba(0,0,0,0.1);
+  --accent: #6366f1;
+  --glass: blur(16px) saturate(1.6);
+  --shadow: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ── 桌宠主体 ──────────────────────────────────────────────── */
+
+#petRoot {
+  position: fixed;
+  inset: 0;
+  display: block;
+  padding: 0;
+}
+
+#petRoot.petdex-root {
+  padding: 0;
+}
+
+#petAvatar {
+  width: var(--pet-size);
+  height: var(--pet-size);
+  border-radius: 50%;
+  background: var(--bg);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  overflow: hidden;
+  position: absolute;
+  right: var(--pet-margin);
+  bottom: var(--pet-margin);
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+#petAvatar:hover { transform: scale(1.06); }
+#petAvatar:active { transform: scale(0.96); }
+
+#petAvatar img, #petAvatar canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+#petAvatar.petdex-mode {
+  width: var(--petdex-w, 96px);
+  height: var(--petdex-h, 104px);
+  --pet-display-w: var(--petdex-w, 96px);
+  --pet-display-h: var(--petdex-h, 104px);
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  overflow: visible;
+}
+
+#petAvatar.petdex-mode::after {
+  display: none;
+}
+
+#petAvatar.petdex-mode canvas.petdex-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 8px 14px rgba(0,0,0,0.2));
+}
+
+#petDefaultIcon {
+  font-size: 38px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+#petDragHandle { display: none; }
+
+/* 状态环 */
+#petAvatar::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  pointer-events: none;
+  transition: border-color 0.3s;
+}
+
+.state-idle      #petAvatar::after { border-color: rgba(99,102,241,0.2); }
+.state-listening #petAvatar::after { border-color: rgba(34,197,94,0.7); animation: pulse-ring 1.2s ease-in-out infinite; }
+.state-thinking  #petAvatar::after { border-color: rgba(251,191,36,0.8); animation: spin-ring 1.4s linear infinite; }
+.state-working   #petAvatar::after { border-color: rgba(99,102,241,0.9); animation: spin-ring 0.9s linear infinite; }
+.state-done      #petAvatar::after { border-color: rgba(34,197,94,1); animation: done-flash 0.5s ease; }
+.state-error     #petAvatar::after { border-color: rgba(239,68,68,0.9); animation: shake-ring 0.4s ease; }
+
+/* 状态动画 */
+.state-idle     #petAvatar { animation: breathe 4s ease-in-out infinite; }
+.state-thinking #petAvatar { animation: think-bob 0.8s ease-in-out infinite; }
+.state-working  #petAvatar { animation: work-wiggle 0.4s ease-in-out infinite; }
+.state-done     #petAvatar { animation: done-bounce 0.5s cubic-bezier(.36,.07,.19,.97); }
+.state-error    #petAvatar { animation: shake 0.35s cubic-bezier(.36,.07,.19,.97); }
+
+@keyframes breathe      { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+@keyframes think-bob    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+@keyframes work-wiggle  { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(3deg)} }
+@keyframes done-bounce  { 0%{transform:scale(1)} 30%{transform:scale(1.18)} 60%{transform:scale(0.94)} 100%{transform:scale(1)} }
+@keyframes shake        { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-5px)} 40%,80%{transform:translateX(5px)} }
+@keyframes pulse-ring   { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.1)} }
+@keyframes spin-ring    { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes done-flash   { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes shake-ring   { 0%,100%{transform:translateX(0)} 25%,75%{transform:translateX(-3px)} 50%{transform:translateX(3px)} }
+
+/* 状态气泡 */
+#petBubble {
+  position: absolute;
+  bottom: calc(var(--pet-margin) + var(--pet-display-h) + 6px);
+  right: calc(var(--pet-margin) + 4px);
+  background: var(--bg);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border-radius: 12px 12px 4px 12px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  color: var(--text);
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+#petBubble.visible { opacity: 1; transform: translateY(0); }
+
+/* ── 迷你聊天框 ──────────────────────────────────────────────── */
+
+#petChat {
+  width: var(--chat-w);
+  height: var(--chat-h);
+  position: absolute;
+  right: var(--pet-margin);
+  bottom: calc(var(--pet-margin) + var(--pet-display-h) + var(--pet-gap));
+  background: var(--bg);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  transform-origin: right bottom;
+  pointer-events: none;
+  transition: opacity 0.22s cubic-bezier(.2,.8,.2,1), transform 0.22s cubic-bezier(.2,.8,.2,1);
+}
+#petChat.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: all;
+}
+
+#petRoot.chat-left #petChat {
+  right: calc(var(--pet-margin) + var(--pet-display-w) + var(--pet-gap));
+  bottom: var(--pet-margin);
+  transform-origin: right bottom;
+}
+
+#petRoot.chat-right #petAvatar {
+  left: var(--pet-margin);
+  right: auto;
+}
+
+#petRoot.chat-right #petBubble {
+  left: calc(var(--pet-margin) + 4px);
+  right: auto;
+}
+
+#petRoot.chat-right #petChat {
+  left: calc(var(--pet-margin) + var(--pet-display-w) + var(--pet-gap));
+  right: auto;
+  bottom: var(--pet-margin);
+  transform-origin: left bottom;
+}
+
+#petRoot.chat-closed #petChat {
+  pointer-events: none;
+}
+
+.pet-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+}
+.pet-chat-header strong { font-size: 13px; }
+.pet-chat-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  -webkit-app-region: no-drag;
+}
+.pet-chat-close:hover { color: var(--text); }
+
+#petMessages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pet-msg {
+  max-width: 90%;
+  padding: 7px 11px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pet-msg-text:empty {
+  min-height: 1em;
+}
+.pet-msg.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.pet-msg.assistant {
+  align-self: flex-start;
+  background: rgba(0,0,0,0.06);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+.pet-msg.assistant.streaming::after {
+  content: "▋";
+  animation: blink 0.7s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.pet-msg-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 7px;
+}
+.pet-msg-attachment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.22);
+}
+.pet-msg.assistant .pet-msg-attachment {
+  background: rgba(255,255,255,0.7);
+}
+.pet-msg-attachment-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.pet-msg-attachment-icon {
+  width: 28px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-align: center;
+  color: inherit;
+}
+.pet-msg-attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+#petDropHint {
+  position: absolute;
+  inset: 42px 10px 58px;
+  border: 1px dashed rgba(99,102,241,0.55);
+  border-radius: 14px;
+  background: rgba(99,102,241,0.1);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.98);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  z-index: 4;
+}
+#petChat.drag-over #petDropHint {
+  opacity: 1;
+  transform: scale(1);
+}
+
+#petAttachmentBar {
+  display: none;
+  gap: 6px;
+  padding: 0 10px 8px;
+  overflow-x: auto;
+  border-top: 1px solid rgba(0,0,0,0.04);
+}
+#petAttachmentBar:not(:empty) {
+  display: flex;
+}
+.pet-attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 155px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.68);
+  color: var(--text);
+  flex: 0 0 auto;
+}
+.pet-attachment-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.pet-attachment-icon {
+  width: 28px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-align: center;
+}
+.pet-attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.pet-attachment-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.pet-attachment-remove:hover {
+  color: var(--text);
+}
+
+.pet-chat-form {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  -webkit-app-region: no-drag;
+}
+.pet-chat-form input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.7);
+  font-size: 12.5px;
+  font-family: inherit;
+  outline: none;
+}
+.pet-chat-form input:focus { border-color: var(--accent); }
+.pet-chat-form button {
+  padding: 7px 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pet-chat-form button:hover { opacity: 0.88; }
+.pet-chat-form button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.pet-resize-handle {
+  position: absolute;
+  z-index: 5;
+  -webkit-app-region: no-drag;
+}
+.pet-resize-e {
+  top: 42px;
+  right: 0;
+  width: 8px;
+  bottom: 12px;
+  cursor: ew-resize;
+}
+.pet-resize-s {
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+.pet-resize-se {
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+}
+.pet-resize-se::after {
+  content: "";
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid rgba(0,0,0,0.28);
+  border-bottom: 1.5px solid rgba(0,0,0,0.28);
+}
+#petRoot.chat-above .pet-resize-e,
+#petRoot.chat-left .pet-resize-e {
+  left: 0;
+  right: auto;
+}
+#petRoot.chat-above .pet-resize-se,
+#petRoot.chat-left .pet-resize-se {
+  left: 0;
+  right: auto;
+  cursor: nesw-resize;
+}
+#petRoot.chat-above .pet-resize-se::after,
+#petRoot.chat-left .pet-resize-se::after {
+  left: 5px;
+  right: auto;
+  border-right: none;
+  border-left: 1.5px solid rgba(0,0,0,0.28);
+  border-bottom: 1.5px solid rgba(0,0,0,0.28);
+}

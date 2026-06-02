@@ -131,7 +131,7 @@ function openAICompatibleSupportsImageInput(provider = {}, model = "") {
   if (providerText.includes("api.openai.com")) return /gpt-4o|gpt-4\.1|gpt-5|o3|o4/.test(String(model).toLowerCase());
   if (providerText.includes("dashscope") || providerText.includes("qwen") || providerText.includes("百炼")) {
     if (/^qwen3-coder|^qwen-coder|coder/.test(normalizedModel)) return false;
-    if (/^qwen3\.(6|5)-(plus|flash)(-|$)/.test(normalizedModel)) return true;
+    if (/^qwen3\.(7|6|5)-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen3-vl-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen-vl|^qvq|omni/.test(normalizedModel)) return true;
   }
@@ -168,7 +168,7 @@ export function providerRequestInfo(provider, protocol, model, thinking) {
 
 // ── 非流式 API ───────────────────────────────────────────────────────────────
 
-export async function callOpenAICompatible({ provider, model, messages, temperature, maxTokens, enableTools, enabledSkills, signal }) {
+export async function callOpenAICompatible({ provider, model, messages, temperature, maxTokens, enableTools, enabledSkills, signal, onStep }) {
   requireKey(provider);
   const endpoint = endpointFromBase(provider.baseUrl, "/chat/completions");
   if (!endpoint) { const e = new Error("请填写 Base URL"); e.status = 400; throw e; }
@@ -189,7 +189,7 @@ export async function callOpenAICompatible({ provider, model, messages, temperat
   const loopMessages = [...messages];
   const steps = [];
   const availableToolNames = new Set(availableTools.map((t) => t.function?.name).filter(Boolean));
-  const maxToolRounds = 10;
+  const maxToolRounds = ctx.maxToolRounds;
 
   for (let i = 0; i < maxToolRounds; i++) {
     const data = await postJson(endpoint, headers, { ...baseBody, messages: loopMessages, tools: availableTools, tool_choice: "auto" }, { signal });
@@ -204,9 +204,11 @@ export async function callOpenAICompatible({ provider, model, messages, temperat
     for (const call of calls) {
       const name = call?.function?.name;
       const args = parseArguments(call?.function?.arguments);
+      onStep?.({ phase: "start", name, args });
       let result;
       try { result = availableToolNames.has(name) ? await handleToolCall(name, args) : { ok: false, error: `工具未启用：${name || "未知工具"}` }; }
       catch (error) { result = { ok: false, error: error.message }; }
+      onStep?.({ phase: "end", name, args, result });
       steps.push({ name, args, result });
       loopMessages.push({ role: "tool", tool_call_id: call.id, name, content: safeJson(result) });
     }

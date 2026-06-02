@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell, Notification, Tray, Menu, nativeImage, screen } from "electron";
+import { app, BrowserWindow, dialog, shell, Notification, Tray, Menu, nativeImage, screen, ipcMain } from "electron";
 import electronUpdater from "electron-updater";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 const execFileAsync = promisify(execFile);
 
 let mainWindow;
+let petWindow = null;
 let serverHandle;
 let workspaceConfigPath;
 let tray;
@@ -22,6 +23,12 @@ let updateStatusLabel = "检查更新";
 let updateReadyInfo = null;
 let updateInstallFallbackTimer = null;
 let macSignatureStatusPromise = null;
+let petQuietMode = false;
+let petAnchor = null;
+let petSettingsPath = "";
+let petSettingsSaveTimer = null;
+let petChatSize = { width: 350, height: 450 };
+let petLayoutState = { open: false, placement: "above", petW: 72, petH: 72, chatW: 350, chatH: 450, margin: 8, gap: 10 };
 let updateState = {
   ok: true,
   supported: false,
@@ -40,6 +47,21 @@ let autoUpdater;
 
 const appIconPath = path.join(__dirname, "../build/icon.png");
 const latestReleaseUrl = "https://github.com/amaook/neoai/releases/latest";
+const desktopTestMode = process.env.NEO_DESKTOP_TEST === "1" || /neo[ -]test/i.test(`${app.getName()} ${app.getPath("exe")}`);
+
+if (desktopTestMode) {
+  app.setName("neo Test");
+}
+
+const desktopTestRoot = process.env.NEO_DESKTOP_TEST_ROOT
+  ? path.resolve(process.env.NEO_DESKTOP_TEST_ROOT)
+  : app.isPackaged
+    ? path.join(app.getPath("userData"), "isolated-test")
+    : path.resolve(path.join(__dirname, "../outputs/desktop-test"));
+
+if (desktopTestMode) {
+  app.setPath("userData", path.join(desktopTestRoot, "user-data"));
+}
 
 const singleInstance = app.requestSingleInstanceLock();
 
@@ -67,7 +89,7 @@ function createWindow(url) {
     y: Math.round(workArea.y + (workArea.height - height) / 2),
     minWidth: 980,
     minHeight: 680,
-    title: "neo",
+    title: desktopTestMode ? "neo 测试版" : "neo",
     icon: appIconPath,
     backgroundColor: isMac ? "#00000000" : "#f7f4ee",
     transparent: isMac,
@@ -126,15 +148,16 @@ function createTray() {
   });
   if (process.platform === "darwin") image.setTemplateImage(true);
   tray = new Tray(image);
-  tray.setToolTip("neo");
+  tray.setToolTip(desktopTestMode ? "neo 测试版" : "neo");
   updateTrayMenu();
   tray.on("click", showMainWindow);
 }
 
 function updateTrayMenu() {
   if (!tray) return;
+  const petVisible = petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "显示 neo", click: showMainWindow },
+    { label: desktopTestMode ? "显示 neo 测试版" : "显示 neo", click: showMainWindow },
     {
       label: "打开工作区文件夹",
       click: () => {
@@ -142,8 +165,21 @@ function updateTrayMenu() {
       }
     },
     {
-      label: updateStatusLabel,
-      enabled: !updateCheckInFlight,
+      label: petVisible ? "隐藏桌宠" : "显示桌宠",
+      click: () => {
+        if (!petWindow || petWindow.isDestroyed()) {
+          createPetWindow();
+          updateTrayMenu();
+          return;
+        }
+        if (petWindow.isVisible()) petWindow.hide();
+        else petWindow.show();
+        updateTrayMenu();
+      }
+    },
+    {
+      label: desktopTestMode ? "测试模式不检查更新" : updateStatusLabel,
+      enabled: !desktopTestMode && !updateCheckInFlight,
       click: () => checkForUpdates(true, { background: true, interactive: true })
     },
     { type: "separator" },
@@ -155,6 +191,47 @@ function updateTrayMenu() {
       }
     }
   ]));
+}
+
+async function loadPetSettings() {
+  petSettingsPath = path.join(app.getPath("userData"), "pet-settings.json");
+  try {
+    const settings = JSON.parse(await readFile(petSettingsPath, "utf8"));
+    petQuietMode = Boolean(settings.quietMode);
+    if (Number.isFinite(settings.anchor?.x) && Number.isFinite(settings.anchor?.y)) {
+      petAnchor = { x: settings.anchor.x, y: settings.anchor.y };
+    }
+    if (Number.isFinite(settings.chatSize?.width) && Number.isFinite(settings.chatSize?.height)) {
+      petChatSize = {
+        width: clamp(Number(settings.chatSize.width), 280, 720),
+        height: clamp(Number(settings.chatSize.height), 320, 900)
+      };
+      petLayoutState.chatW = petChatSize.width;
+      petLayoutState.chatH = petChatSize.height;
+    }
+  } catch {
+    petQuietMode = false;
+    petAnchor = null;
+    petChatSize = { width: 350, height: 450 };
+  }
+}
+
+async function savePetSettings() {
+  if (!petSettingsPath) return;
+  try {
+    await writeFile(petSettingsPath, JSON.stringify({
+      quietMode: petQuietMode,
+      anchor: petAnchor,
+      chatSize: petChatSize
+    }, null, 2));
+  } catch {
+    // 桌宠设置失败不影响主应用。
+  }
+}
+
+function queueSavePetSettings() {
+  clearTimeout(petSettingsSaveTimer);
+  petSettingsSaveTimer = setTimeout(savePetSettings, 250);
 }
 
 function setUpdateStatus(label, patch = {}) {
@@ -714,10 +791,18 @@ async function renderImageFile({ html, sourcePath, outputPath, width, height, fo
 }
 
 async function boot() {
-  const defaultWorkspaceRoot = path.join(app.getPath("documents"), "neo Workspace");
+  if (desktopTestMode) {
+    await mkdir(path.join(desktopTestRoot, "workspace"), { recursive: true });
+    await mkdir(app.getPath("userData"), { recursive: true });
+  }
+
+  const defaultWorkspaceRoot = desktopTestMode
+    ? path.join(desktopTestRoot, "workspace")
+    : path.join(app.getPath("documents"), "neo Workspace");
   const workspaceRoot = await readSavedWorkspace(defaultWorkspaceRoot);
   currentWorkspaceRoot = workspaceRoot;
   await mkdir(workspaceRoot, { recursive: true });
+  await loadPetSettings();
 
   serverHandle = await startServer({
     port: 0,
@@ -728,12 +813,17 @@ async function boot() {
     showWorkspacePath: async (targetPath) => shell.showItemInFolder(targetPath),
     openExternalUrl: async (targetUrl) => shell.openExternal(targetUrl),
     notifyDesktop: async (title, body) => {
+      if (desktopTestMode) return;
       if (Notification.isSupported()) new Notification({ title, body }).show();
     },
     renderImageFile,
-    checkDesktopUpdates: async (manual) => checkForUpdates(manual, { background: true, interactive: false }),
+    checkDesktopUpdates: async (manual) => desktopTestMode
+      ? { ok: false, supported: false, status: "test-mode", message: "桌面测试模式不检查更新" }
+      : checkForUpdates(manual, { background: true, interactive: false }),
     getDesktopUpdateStatus: async () => getUpdateState(),
-    installDesktopUpdate: async () => installDownloadedUpdate(),
+    installDesktopUpdate: async () => desktopTestMode
+      ? { ok: false, supported: false, status: "test-mode", message: "桌面测试模式不安装更新" }
+      : installDownloadedUpdate(),
     selectWorkspaceRoot: async (currentWorkspace) => {
       const result = await dialog.showOpenDialog(mainWindow, {
         title: "选择 neo 工作文件夹",
@@ -750,7 +840,332 @@ async function boot() {
 
   createWindow(serverHandle.url);
   createTray();
-  configureAutoUpdates();
+  if (desktopTestMode) {
+    setUpdateStatus("测试模式", {
+      supported: false,
+      status: "test-mode",
+      message: "桌面测试模式",
+      detail: "已隔离用户数据、工作区和更新检查"
+    });
+  } else {
+    configureAutoUpdates();
+  }
+  createPetWindow();
+  setupPetIpc();
+}
+
+// ── 桌宠窗口 ──────────────────────────────────────────────────────
+
+const PET_SIZE = 72;
+const PET_MARGIN = 24;
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function clampPetBounds(bounds) {
+  const display = screen.getDisplayMatching(bounds);
+  const area = display.bounds || display.workArea;
+  const width = clamp(Math.round(bounds.width || PET_SIZE), PET_SIZE, area.width);
+  const height = clamp(Math.round(bounds.height || PET_SIZE), PET_SIZE, area.height);
+  return {
+    width,
+    height,
+    x: clamp(Math.round(bounds.x), area.x, area.x + area.width - width),
+    y: clamp(Math.round(bounds.y), area.y, area.y + area.height - height)
+  };
+}
+
+function normalizedPetLayout(payload = {}) {
+  const open = Boolean(payload.open);
+  const petW = clamp(Number(payload.petW || petLayoutState.petW || PET_SIZE), PET_SIZE, 180);
+  const petH = clamp(Number(payload.petH || petLayoutState.petH || PET_SIZE), PET_SIZE, 220);
+  const chatW = clamp(Number(payload.chatW || petChatSize.width || 350), 280, 720);
+  const chatH = clamp(Number(payload.chatH || petChatSize.height || 450), 320, 900);
+  return {
+    open,
+    petW,
+    petH,
+    chatW,
+    chatH,
+    margin: clamp(Number(payload.margin || 8), 0, 32),
+    gap: clamp(Number(payload.gap || 10), 0, 28),
+    placement: String(payload.placement || "auto")
+  };
+}
+
+function petBottomRightFromBounds(bounds = petWindow?.getBounds()) {
+  const layout = petLayoutState || {};
+  const margin = Number(layout.margin || 8);
+  if (!bounds) return petAnchor;
+  if (layout.open && layout.placement === "right") {
+    return { x: bounds.x + margin + Number(layout.petW || PET_SIZE), y: bounds.y + bounds.height - margin };
+  }
+  return { x: bounds.x + bounds.width - margin, y: bounds.y + bounds.height - margin };
+}
+
+function choosePetPlacement(layout, anchor, workArea) {
+  if (!layout.open) return "closed";
+  if (layout.placement && layout.placement !== "auto") return layout.placement;
+  const margin = layout.margin;
+  const gap = layout.gap;
+  const aboveH = layout.chatH + gap + layout.petH + margin * 2;
+  const sideW = layout.chatW + gap + layout.petW + margin * 2;
+  const sideH = Math.max(layout.chatH, layout.petH) + margin * 2;
+  const enoughAbove = anchor.y - (aboveH - margin) >= workArea.y;
+  const enoughLeft = anchor.x - (sideW - margin) >= workArea.x;
+  const enoughRight = anchor.x - (margin + layout.petW) + sideW <= workArea.x + workArea.width;
+  if (enoughAbove) return "above";
+  if (enoughLeft) return "left";
+  if (enoughRight) return "right";
+  return "above";
+}
+
+function boundsForPetLayout(layout) {
+  const current = petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null;
+  const anchor = petAnchor || petBottomRightFromBounds(current) || { x: 0, y: 0 };
+  const display = screen.getDisplayNearestPoint(anchor);
+  const workArea = display.bounds || display.workArea;
+  const placement = choosePetPlacement(layout, anchor, workArea);
+  const margin = layout.margin;
+  const gap = layout.gap;
+  let width = layout.petW + margin * 2;
+  let height = layout.petH + margin * 2;
+  let petLocalRight = width - margin;
+  let petLocalBottom = height - margin;
+
+  if (layout.open && placement === "above") {
+    width = Math.max(layout.chatW, layout.petW) + margin * 2;
+    height = layout.chatH + gap + layout.petH + margin * 2;
+    petLocalRight = width - margin;
+    petLocalBottom = height - margin;
+  } else if (layout.open && placement === "left") {
+    width = layout.chatW + gap + layout.petW + margin * 2;
+    height = Math.max(layout.chatH, layout.petH) + margin * 2;
+    petLocalRight = width - margin;
+    petLocalBottom = height - margin;
+  } else if (layout.open && placement === "right") {
+    width = layout.petW + gap + layout.chatW + margin * 2;
+    height = Math.max(layout.chatH, layout.petH) + margin * 2;
+    petLocalRight = margin + layout.petW;
+    petLocalBottom = height - margin;
+  }
+
+  const unclamped = {
+    width,
+    height,
+    x: anchor.x - petLocalRight,
+    y: anchor.y - petLocalBottom
+  };
+  return {
+    bounds: clampPetBounds(unclamped),
+    placement
+  };
+}
+
+function defaultPetBounds() {
+  const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const workArea = cursorDisplay.workArea;
+  const anchor = petAnchor || {
+    x: workArea.x + workArea.width - PET_MARGIN,
+    y: workArea.y + workArea.height - PET_MARGIN
+  };
+  return clampPetBounds({
+    width: PET_SIZE,
+    height: PET_SIZE,
+    x: anchor.x - PET_SIZE,
+    y: anchor.y - PET_SIZE
+  });
+}
+
+function rememberPetAnchor() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  const bounds = petWindow.getBounds();
+  petAnchor = petBottomRightFromBounds(bounds);
+  queueSavePetSettings();
+}
+
+function createPetWindow() {
+  if (petWindow && !petWindow.isDestroyed()) return petWindow;
+
+  const bounds = defaultPetBounds();
+
+  petWindow = new BrowserWindow({
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: false,
+    roundedCorners: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false, // 需要关闭以让 preload CJS require electron
+      preload: path.join(__dirname, "pet-preload.cjs")
+    }
+  });
+
+  petWindow.setAlwaysOnTop(true, "floating");
+  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
+  petWindow.loadURL(`${serverHandle.url}/pet.html`);
+  petWindow.webContents.once("did-finish-load", () => {
+    if (!petWindow || petWindow.isDestroyed()) return;
+    petWindow.webContents.send("pet:quiet-mode", petQuietMode);
+  });
+
+  petWindow.on("closed", () => {
+    petWindow = null;
+    updateTrayMenu();
+  });
+  petWindow.on("move", rememberPetAnchor);
+  petWindow.on("resize", rememberPetAnchor);
+
+  return petWindow;
+}
+
+function setupPetIpc() {
+  // 提供服务器 URL 给桌宠（同步 IPC）
+  ipcMain.removeAllListeners("pet:get-server-url");
+  ipcMain.on("pet:get-server-url", (event) => {
+    event.returnValue = serverHandle?.url || "";
+  });
+
+  ipcMain.removeAllListeners("pet:get-settings");
+  ipcMain.on("pet:get-settings", (event) => {
+    event.returnValue = {
+      quietMode: petQuietMode,
+      chatSize: petChatSize,
+      anchor: petAnchor
+    };
+  });
+
+  ipcMain.removeAllListeners("pet:save-chat-size");
+  ipcMain.on("pet:save-chat-size", (_, size = {}) => {
+    if (Number.isFinite(Number(size.width)) && Number.isFinite(Number(size.height))) {
+      petChatSize = {
+        width: clamp(Number(size.width), 280, 720),
+        height: clamp(Number(size.height), 320, 900)
+      };
+      petLayoutState.chatW = petChatSize.width;
+      petLayoutState.chatH = petChatSize.height;
+      queueSavePetSettings();
+    }
+  });
+
+  // 调整窗口大小（展开/收起聊天框）
+  ipcMain.removeAllListeners("pet:set-size");
+  ipcMain.on("pet:set-size", (event, { w, h }) => {
+    if (!petWindow || petWindow.isDestroyed()) return;
+    const current = petWindow.getBounds();
+    const anchor = { x: current.x + current.width, y: current.y + current.height };
+    const next = clampPetBounds({
+      width: Number(w) || PET_SIZE,
+      height: Number(h) || PET_SIZE,
+      x: anchor.x - (Number(w) || PET_SIZE),
+      y: anchor.y - (Number(h) || PET_SIZE)
+    });
+    petWindow.setBounds(next);
+    rememberPetAnchor();
+  });
+
+  ipcMain.removeAllListeners("pet:set-layout");
+  ipcMain.on("pet:set-layout", (_, payload = {}) => {
+    if (!petWindow || petWindow.isDestroyed()) return;
+    petAnchor = petBottomRightFromBounds(petWindow.getBounds()) || petAnchor;
+    const layout = normalizedPetLayout(payload);
+    if (layout.open && payload.saveChatSize !== false) {
+      petChatSize = { width: layout.chatW, height: layout.chatH };
+    }
+    const { bounds, placement } = boundsForPetLayout(layout);
+    petLayoutState = { ...layout, placement };
+    petWindow.setBounds(bounds);
+    petWindow.webContents.send("pet:layout", {
+      placement,
+      bounds,
+      chatSize: { width: layout.chatW, height: layout.chatH }
+    });
+    rememberPetAnchor();
+  });
+
+  // 右键菜单
+  ipcMain.removeAllListeners("pet:context-menu");
+  ipcMain.on("pet:context-menu", (event) => {
+    const menu = Menu.buildFromTemplate([
+      {
+        label: "打开主窗口",
+        click: () => showMainWindow()
+      },
+      {
+        label: "换头像",
+        click: async () => {
+          const result = await dialog.showOpenDialog({
+            title: "选择桌宠头像",
+            properties: ["openFile"],
+            filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }]
+          });
+          if (!result.canceled && result.filePaths.length) {
+            const img = nativeImage.createFromPath(result.filePaths[0]);
+            if (img.isEmpty()) return;
+            const dataUrl = img.toDataURL();
+            if (petWindow && !petWindow.isDestroyed()) {
+              petWindow.webContents.send("pet:avatar", dataUrl);
+            }
+          }
+        }
+      },
+      {
+        label: "安静模式",
+        type: "checkbox",
+        checked: petQuietMode,
+        click: (item) => {
+          petQuietMode = item.checked;
+          queueSavePetSettings();
+          if (petWindow && !petWindow.isDestroyed()) {
+            petWindow.webContents.send("pet:quiet-mode", petQuietMode);
+          }
+        }
+      },
+      { type: "separator" },
+      {
+        label: "隐藏桌宠",
+        click: () => {
+          if (petWindow && !petWindow.isDestroyed()) petWindow.hide();
+          updateTrayMenu();
+        }
+      },
+      {
+        label: "退出 neo",
+        click: () => { isQuitting = true; app.quit(); }
+      }
+    ]);
+    menu.popup({ window: petWindow });
+  });
+
+  // 打开主窗口
+  ipcMain.removeAllListeners("pet:open-main");
+  ipcMain.on("pet:open-main", () => showMainWindow());
+
+  // 隐藏桌宠
+  ipcMain.removeAllListeners("pet:hide");
+  ipcMain.on("pet:hide", () => {
+    if (petWindow && !petWindow.isDestroyed()) petWindow.hide();
+    updateTrayMenu();
+  });
+
+  // JS 拖动：增量移动窗口
+  ipcMain.removeAllListeners("pet:move-by");
+  ipcMain.on("pet:move-by", (_, { dx, dy }) => {
+    if (!petWindow || petWindow.isDestroyed()) return;
+    const b = petWindow.getBounds();
+    const next = clampPetBounds({ ...b, x: b.x + Math.round(dx), y: b.y + Math.round(dy) });
+    petWindow.setPosition(next.x, next.y);
+    rememberPetAnchor();
+  });
 }
 
 app.on("second-instance", () => {

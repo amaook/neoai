@@ -9,6 +9,10 @@ import { fileURLToPath } from "node:url";
 
 import { ctx, rootDir } from "./context.mjs";
 import {
+  listSchedules, createSchedule, updateSchedule, deleteSchedule,
+  runScheduleNow, scheduleExprLabel, computeNextRun
+} from "./scheduler.mjs";
+import {
   resolveWorkspacePath, isExcelPath, attachmentRelativePath, parseDataUrl,
   attachmentSummary, attachmentContentForPath, createExcelWorkbook, exportImage, safeJson
 } from "./tools.mjs";
@@ -59,6 +63,70 @@ export async function readBody(req) {
   if (!raw) return {};
   try { return JSON.parse(raw); }
   catch { const e = new Error("请求体不是合法 JSON"); e.status = 400; throw e; }
+}
+
+const PETDEX_MANIFEST_URL = "https://petdex.crafter.run/api/manifest";
+const PETDEX_CACHE_MS = 10 * 60 * 1000;
+let petdexManifestCache = null;
+
+function normalizePetdexPet(item, index) {
+  const slug = String(item?.slug || "").trim();
+  const spritesheetUrl = String(item?.spritesheetUrl || "").trim();
+  if (!slug || !spritesheetUrl) return null;
+  return {
+    slug,
+    displayName: String(item.displayName || slug).trim(),
+    kind: String(item.kind || "").trim(),
+    submittedBy: String(item.submittedBy || "").trim(),
+    spritesheetUrl,
+    petJsonUrl: String(item.petJsonUrl || "").trim(),
+    zipUrl: item.zipUrl ? String(item.zipUrl).trim() : "",
+    sourceIndex: index
+  };
+}
+
+async function fetchPetdexManifest({ refresh = false } = {}) {
+  const now = Date.now();
+  if (!refresh && petdexManifestCache && now - petdexManifestCache.fetchedAt < PETDEX_CACHE_MS) {
+    return { ...petdexManifestCache.payload, cached: true, stale: false };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(PETDEX_MANIFEST_URL, {
+      headers: { Accept: "application/json", "User-Agent": `neo/${appVersion}` },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Petdex ${response.status}`);
+    const data = await response.json();
+    const pets = Array.isArray(data.pets)
+      ? data.pets.map(normalizePetdexPet).filter(Boolean)
+      : [];
+    if (!pets.length) throw new Error("Petdex 源没有返回宠物列表");
+    const payload = {
+      ok: true,
+      source: PETDEX_MANIFEST_URL,
+      generatedAt: data.generatedAt || "",
+      total: Number(data.total || pets.length),
+      fetchedAt: new Date().toISOString(),
+      pets
+    };
+    petdexManifestCache = { fetchedAt: now, payload };
+    return { ...payload, cached: false, stale: false };
+  } catch (error) {
+    if (petdexManifestCache) {
+      return { ...petdexManifestCache.payload, cached: true, stale: true, warning: error.message || "Petdex 源暂时不可用" };
+    }
+    throw Object.assign(new Error(error.message || "Petdex 源暂时不可用"), { status: 502 });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function handlePetdexPets(req, res, url) {
+  const refresh = url.searchParams.get("refresh") === "1";
+  sendJson(res, 200, await fetchPetdexManifest({ refresh }));
 }
 
 // ── 应用状态持久化 ────────────────────────────────────────────────────────────
@@ -310,6 +378,65 @@ export async function handleDesktopInstallUpdate(req, res) {
   sendJson(res, 200, { ok: true, supported: true, ...(result || {}) });
 }
 
+// ── 定时任务路由 ──────────────────────────────────────────────────────────────
+
+export async function handleScheduleList(req, res) {
+  const items = listSchedules().map((s) => ({ ...s, scheduleLabel: scheduleExprLabel(s.schedule) }));
+  sendJson(res, 200, { ok: true, schedules: items });
+}
+
+export async function handleScheduleCreate(req, res) {
+  const body = await readBody(req);
+  const schedule = await createSchedule(body);
+  sendJson(res, 200, { ok: true, schedule: { ...schedule, scheduleLabel: scheduleExprLabel(schedule.schedule) } });
+}
+
+export async function handleScheduleUpdate(req, res, id) {
+  const body = await readBody(req);
+  const schedule = await updateSchedule(id, body);
+  if (!schedule) throw Object.assign(new Error("未找到定时任务"), { status: 404 });
+  sendJson(res, 200, { ok: true, schedule: { ...schedule, scheduleLabel: scheduleExprLabel(schedule.schedule) } });
+}
+
+export async function handleScheduleDelete(req, res, id) {
+  const ok = await deleteSchedule(id);
+  if (!ok) throw Object.assign(new Error("未找到定时任务"), { status: 404 });
+  sendJson(res, 200, { ok: true });
+}
+
+export async function handleScheduleRun(req, res, id) {
+  const result = await runScheduleNow(id);
+  sendJson(res, result.ok ? 200 : 500, { ok: result.ok, ...result });
+}
+
+// ── 桌宠状态广播 ──────────────────────────────────────────────────────────────
+
+const petStateListeners = new Set();
+let currentPetState = "idle";
+
+export function broadcastPetState(state) {
+  currentPetState = String(state || "idle");
+  const data = `data: ${JSON.stringify({ state: currentPetState })}\n\n`;
+  for (const r of petStateListeners) {
+    if (!r.writableEnded) r.write(data);
+    else petStateListeners.delete(r);
+  }
+}
+
+export async function handlePetStatePost(req, res) {
+  const body = await readBody(req);
+  broadcastPetState(body.state || "idle");
+  sendJson(res, 200, { ok: true, state: currentPetState });
+}
+
+export function handlePetStateStream(req, res) {
+  res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
+  // 立即发送当前状态
+  res.write(`data: ${JSON.stringify({ state: currentPetState })}\n\n`);
+  petStateListeners.add(res);
+  req.on("close", () => petStateListeners.delete(res));
+}
+
 async function serveStatic(req, res, url) {
   const requestPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
   const target = path.resolve(ctx.publicDir, requestPath.replace(/^\/+/, ""));
@@ -336,6 +463,16 @@ export function createNeoServer() {
       if (req.method === "POST" && url.pathname === "/api/desktop/check-update") { await handleDesktopCheckUpdate(req, res); return; }
       if (req.method === "GET" && url.pathname === "/api/desktop/update-status") { await handleDesktopUpdateStatus(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/desktop/install-update") { await handleDesktopInstallUpdate(req, res); return; }
+      // 定时任务
+      if (req.method === "GET" && url.pathname === "/api/schedules") { await handleScheduleList(req, res); return; }
+      if (req.method === "POST" && url.pathname === "/api/schedules") { await handleScheduleCreate(req, res); return; }
+      if (req.method === "PATCH" && url.pathname.startsWith("/api/schedules/")) { await handleScheduleUpdate(req, res, url.pathname.slice("/api/schedules/".length)); return; }
+      if (req.method === "DELETE" && url.pathname.startsWith("/api/schedules/")) { await handleScheduleDelete(req, res, url.pathname.slice("/api/schedules/".length)); return; }
+      if (req.method === "POST" && url.pathname.startsWith("/api/schedules/") && url.pathname.endsWith("/run")) { await handleScheduleRun(req, res, url.pathname.slice("/api/schedules/".length, -4)); return; }
+      if (req.method === "GET" && url.pathname === "/api/petdex/pets") { await handlePetdexPets(req, res, url); return; }
+      // 桌宠状态
+      if (req.method === "POST" && url.pathname === "/api/pet/state") { await handlePetStatePost(req, res); return; }
+      if (req.method === "GET" && url.pathname === "/api/pet/stream") { handlePetStateStream(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/chat") { await handleChat(req, res); return; }
       if (req.method === "GET" && url.pathname === "/api/workspace/tree") { await handleTree(req, res, url); return; }
       if (req.method === "POST" && url.pathname === "/api/workspace/select-folder") { await handleSelectWorkspace(req, res); return; }
@@ -356,4 +493,3 @@ export function createNeoServer() {
     }
   });
 }
-

@@ -7,6 +7,7 @@
 //   server/sse.mjs         — SSE 流式 API（含 Anthropic/Gemini 工具调用 + 心跳）
 //   server/environment.mjs — 环境检测与安装脚本
 //   server/routes.mjs      — HTTP 路由与 createNeoServer
+//   server/scheduler.mjs   — 定时自动化调度引擎
 
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
@@ -14,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { ctx } from "./server/context.mjs";
 import { createNeoServer } from "./server/routes.mjs";
+import { startScheduler, stopScheduler } from "./server/scheduler.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,10 +45,12 @@ export function startServer(options = {}) {
 
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(listenPort, "127.0.0.1", () => {
+    server.listen(listenPort, "127.0.0.1", async () => {
       server.off("error", reject);
       const address = server.address();
       const actualPort = typeof address === "object" && address ? address.port : listenPort;
+      // 启动定时调度器（异步，不阻塞服务器启动）
+      startScheduler().catch((err) => console.error("[neo scheduler] 启动失败:", err.message));
       resolve({ server, port: actualPort, url: `http://127.0.0.1:${actualPort}` });
     });
   });
