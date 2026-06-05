@@ -16,11 +16,18 @@ import { randomUUID } from "node:crypto";
 
 import { ctx } from "./context.mjs";
 import { callOpenAICompatible } from "./api.mjs";
-import { resolveWorkspacePath } from "./tools.mjs";
+import { normalizeToolConsent, resolveWorkspacePath } from "./tools.mjs";
 
 let schedules = [];
 let schedulerInterval = null;
 let running = new Set(); // 正在执行的任务 id，防止重叠
+
+function scheduleToolConsent(data = {}) {
+  const fallback = data.enableTools
+    ? { fileRead: true, fileWrite: true, web: false, desktop: false, command: false }
+    : {};
+  return normalizeToolConsent(data.toolConsent || fallback);
+}
 
 // ── 文件路径 ──────────────────────────────────────────────────────────────────
 
@@ -35,7 +42,11 @@ export async function loadSchedules() {
   try {
     const fp = schedulesFilePath();
     if (!existsSync(fp)) { schedules = []; return; }
-    schedules = JSON.parse(await readFile(fp, "utf8")) || [];
+    schedules = (JSON.parse(await readFile(fp, "utf8")) || []).map((schedule) => ({
+      ...schedule,
+      engine: "native",
+      toolConsent: scheduleToolConsent(schedule)
+    }));
   } catch { schedules = []; }
 }
 
@@ -158,8 +169,10 @@ export async function createSchedule(data) {
     schedule: String(data.schedule || "daily 09:00"),
     providerId: String(data.providerId || ""),
     model: String(data.model || ""),
+    engine: "native",
     enableTools: Boolean(data.enableTools),
     enabledSkills: Array.isArray(data.enabledSkills) ? data.enabledSkills : [],
+    toolConsent: scheduleToolConsent(data),
     outputFile: String(data.outputFile || "schedules/{date}-{name}.md"),
     notify: Boolean(data.notify !== false), // 默认开启桌面通知
     enabled: true,
@@ -181,7 +194,11 @@ export async function updateSchedule(id, patch) {
     err.status = 400;
     throw err;
   }
-  schedules[idx] = { ...schedules[idx], ...patch };
+  const normalizedPatch = { ...patch };
+  if (patch.enableTools !== undefined || patch.toolConsent !== undefined) {
+    normalizedPatch.toolConsent = scheduleToolConsent({ ...schedules[idx], ...patch });
+  }
+  schedules[idx] = { ...schedules[idx], ...normalizedPatch };
   if (patch.schedule) schedules[idx].nextRun = computeNextRun(patch.schedule);
   await saveSchedules();
   return schedules[idx];
@@ -249,7 +266,8 @@ async function _executeSchedule(schedule) {
       messages: [{ role: "user", content: schedule.prompt }],
       temperature: 0.7,
       enableTools: schedule.enableTools,
-      enabledSkills: schedule.enabledSkills
+      enabledSkills: schedule.enabledSkills,
+      toolConsent: scheduleToolConsent(schedule)
     });
 
     const content = result.content || "(无输出)";

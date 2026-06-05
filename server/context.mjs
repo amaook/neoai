@@ -30,6 +30,7 @@ export const ctx = {
 
   // Electron 注入的桌面端回调（web 模式下为 null）
   selectWorkspaceRoot: null,
+  selectExternalPaths: null,
   openWorkspacePath: null,
   showWorkspacePath: null,
   openExternalUrl: null,

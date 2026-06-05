@@ -1,6 +1,14 @@
 // server/api.mjs — 非流式 API 调用（OpenAI / Anthropic / Gemini / Mock）
 import { ctx } from "./context.mjs";
+import { appendRecoveryUserMessage } from "./agent-recovery.mjs";
 import { agentTools, skillToolMap, toolsForSkillIds, handleToolCall, parseArguments, safeJson } from "./tools.mjs";
+import { blockPseudoToolOutput } from "./pseudo-tools.mjs";
+import {
+  blockUnverifiedCompletion,
+  repeatedToolArgumentFailure,
+  runToolWithReceipt,
+  toolArgumentFuseContent
+} from "./tool-integrity.mjs";
 
 // ── 共用工具 ─────────────────────────────────────────────────────────────────
 
@@ -131,13 +139,19 @@ function openAICompatibleSupportsImageInput(provider = {}, model = "") {
   if (providerText.includes("api.openai.com")) return /gpt-4o|gpt-4\.1|gpt-5|o3|o4/.test(String(model).toLowerCase());
   if (providerText.includes("dashscope") || providerText.includes("qwen") || providerText.includes("百炼")) {
     if (/^qwen3-coder|^qwen-coder|coder/.test(normalizedModel)) return false;
-    if (/^qwen3\.(7|6|5)-(plus|flash)(-|$)/.test(normalizedModel)) return true;
+    if (/^qwen3\.(6|5)-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen3-vl-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen-vl|^qvq|omni/.test(normalizedModel)) return true;
   }
   if (providerText.includes("moonshot") || providerText.includes("kimi")) {
     if (/^kimi-k2\.(6|5)(-|$)/.test(normalizedModel)) return true;
     if (/^moonshot-v1-(8k|32k|128k)-vision-preview$/.test(normalizedModel)) return true;
+  }
+  if (providerText.includes("api.x.ai") || providerText.includes("xai") || providerText.includes("grok")) {
+    return /^grok-(4\.3|build-0\.1)(-|$)/.test(normalizedModel);
+  }
+  if (providerText.includes("mistral")) {
+    return /^mistral-(medium-3-5|large-2512|small-2603)(-|$)/.test(normalizedModel);
   }
   return /vision|vl|omni|multimodal|llava/.test(providerText);
 }
@@ -166,23 +180,42 @@ export function providerRequestInfo(provider, protocol, model, thinking) {
   return { provider: provider.name || provider.id || "未命名供应商", protocol, model, thinking: thinking || "", endpoint, calledAt: new Date().toISOString() };
 }
 
+function isOpenAIHostedModel(provider = {}, model = "") {
+  const providerText = [provider.id, provider.name, provider.baseUrl].filter(Boolean).join(" ").toLowerCase();
+  return providerText.includes("api.openai.com") && /^gpt-5|^o[134]/.test(String(model || "").trim().toLowerCase());
+}
+
+export function openAICompatibleChatBody({ provider, model, messages, temperature, maxTokens, stream }) {
+  const body = { model, messages, stream };
+  const openAIHosted = isOpenAIHostedModel(provider, model);
+  if (!openAIHosted && Number.isFinite(Number(temperature))) body.temperature = Number(temperature);
+  if (maxTokens) {
+    if (openAIHosted) body.max_completion_tokens = maxTokens;
+    else body.max_tokens = maxTokens;
+  }
+  return body;
+}
+
 // ── 非流式 API ───────────────────────────────────────────────────────────────
 
-export async function callOpenAICompatible({ provider, model, messages, temperature, maxTokens, enableTools, enabledSkills, signal, onStep }) {
+export async function callOpenAICompatible({ provider, model, messages, temperature, maxTokens, enableTools, enabledSkills, toolConsent, signal, onStep, allowSkillDelegation = true }) {
   requireKey(provider);
   const endpoint = endpointFromBase(provider.baseUrl, "/chat/completions");
   if (!endpoint) { const e = new Error("请填写 Base URL"); e.status = 400; throw e; }
 
   const headers = { Authorization: `Bearer ${provider.apiKey}` };
-  const baseBody = { model, messages, temperature, stream: false };
-  if (maxTokens) baseBody.max_tokens = maxTokens;
+  const baseBody = openAICompatibleChatBody({ provider, model, messages, temperature, maxTokens, stream: false });
 
-  const availableTools = enableTools ? toolsForSkillIds(enabledSkills) : [];
+  const availableTools = enableTools ? toolsForSkillIds(enabledSkills, toolConsent, { includeInvokeSkill: allowSkillDelegation }) : [];
   if (!enableTools || !availableTools.length) {
     const data = await postJson(endpoint, headers, baseBody, { signal });
     const choice = data?.choices?.[0] || {};
     const message = choice.message || {};
     const content = messageTextContent(message);
+    const blocked = blockPseudoToolOutput(content, { enableTools });
+    if (blocked) return { ...blocked, usage: data?.usage || null, raw: data, steps: [] };
+    const unverified = blockUnverifiedCompletion(content, { steps: [] });
+    if (unverified) return { ...unverified, usage: data?.usage || null, raw: data, steps: [] };
     return { content, usage: data?.usage || null, raw: data, emptyReason: content ? null : emptyResponseReason(choice, message) };
   }
 
@@ -198,20 +231,35 @@ export async function callOpenAICompatible({ provider, model, messages, temperat
     const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
     if (!calls.length) {
       const content = messageTextContent(message);
+      const blocked = blockPseudoToolOutput(content, { enableTools });
+      if (blocked) return { ...blocked, usage: data?.usage || null, raw: data, steps };
+      const unverified = blockUnverifiedCompletion(content, { steps });
+      if (unverified) return { ...unverified, usage: data?.usage || null, raw: data, steps };
       return { content, usage: data?.usage || null, raw: data, steps, emptyReason: content ? null : emptyResponseReason(choice, message) };
     }
     loopMessages.push(message);
+    const roundSteps = [];
     for (const call of calls) {
       const name = call?.function?.name;
       const args = parseArguments(call?.function?.arguments);
       onStep?.({ phase: "start", name, args });
-      let result;
-      try { result = availableToolNames.has(name) ? await handleToolCall(name, args) : { ok: false, error: `工具未启用：${name || "未知工具"}` }; }
-      catch (error) { result = { ok: false, error: error.message }; }
-      onStep?.({ phase: "end", name, args, result });
-      steps.push({ name, args, result });
-      loopMessages.push({ role: "tool", tool_call_id: call.id, name, content: safeJson(result) });
+      const step = await runToolWithReceipt({
+        name,
+        args,
+        toolConsent,
+        availableToolNames,
+        runner: handleToolCall
+      });
+      onStep?.({ phase: "end", name, args, result: step.result, receipt: step.receipt });
+      steps.push(step);
+      roundSteps.push(step);
+      loopMessages.push({ role: "tool", tool_call_id: call.id, name, content: safeJson(step.result) });
+      const fuse = repeatedToolArgumentFailure(steps);
+      if (fuse) {
+        return { content: toolArgumentFuseContent(fuse), usage: null, raw: data, steps, toolArgFuse: fuse };
+      }
     }
+    appendRecoveryUserMessage(loopMessages, roundSteps, availableTools);
   }
 
   const limitPrompt = [`[系统提示] 已达到工具调用上限（${maxToolRounds} 轮），无法继续调用工具。`, "请根据上面已执行的工具结果，向用户如实汇报：", "1. 已完成的步骤和结果（包括文件路径）", "2. 尚未完成的步骤（如有），并说明原因是达到了调用轮次上限", "3. 建议用户如何继续（例如：再次发送任务以继续剩余步骤）", "不要说任务已全部完成，除非所有步骤都成功执行。"].join("\n");
@@ -219,7 +267,11 @@ export async function callOpenAICompatible({ provider, model, messages, temperat
     const data = await postJson(endpoint, headers, { ...baseBody, messages: [...loopMessages, { role: "user", content: limitPrompt }] }, { signal });
     const choice = data?.choices?.[0] || {};
     const content = messageTextContent(choice.message || {});
-    if (content) return { content, usage: data?.usage || null, raw: data, steps, hitToolLimit: true };
+    if (content) {
+      const unverified = blockUnverifiedCompletion(content, { steps });
+      if (unverified) return { ...unverified, usage: data?.usage || null, raw: data, steps, hitToolLimit: true };
+      return { content, usage: data?.usage || null, raw: data, steps, hitToolLimit: true };
+    }
   } catch {}
 
   const succeeded = steps.filter((s) => s?.result?.ok);
@@ -235,6 +287,10 @@ export async function callAnthropic({ provider, model, messages, temperature, ma
   const conversational = messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: toAnthropicContent(m.content) }));
   const data = await postJson(endpoint, { "x-api-key": provider.apiKey, "anthropic-version": provider.anthropicVersion || "2023-06-01" }, { model, max_tokens: maxTokens || 2048, temperature, ...(system ? { system } : {}), messages: conversational }, { signal });
   const content = (data?.content || []).map((part) => part.text || "").join("").trim();
+  const blocked = blockPseudoToolOutput(content, { enableTools: false });
+  if (blocked) return { ...blocked, usage: data?.usage || null, raw: data, steps: [] };
+  const unverified = blockUnverifiedCompletion(content, { steps: [] });
+  if (unverified) return { ...unverified, usage: data?.usage || null, raw: data, steps: [] };
   return { content, usage: data?.usage || null, raw: data, emptyReason: content ? null : { finishReason: data?.stop_reason || "", contentType: typeof data?.content, messageKeys: Object.keys(data || {}) } };
 }
 
@@ -247,6 +303,10 @@ export async function callGemini({ provider, model, messages, temperature, maxTo
   const data = await postJson(endpoint, { "x-goog-api-key": provider.apiKey }, { ...(systemText ? { systemInstruction: { parts: [{ text: systemText }] } } : {}), contents, generationConfig: { temperature, ...(maxTokens ? { maxOutputTokens: maxTokens } : {}) } }, { signal });
   const candidate = data?.candidates?.[0] || {};
   const content = (candidate?.content?.parts || []).map((p) => p.text || "").join("").trim();
+  const blocked = blockPseudoToolOutput(content, { enableTools: false });
+  if (blocked) return { ...blocked, usage: data?.usageMetadata || null, raw: data, steps: [] };
+  const unverified = blockUnverifiedCompletion(content, { steps: [] });
+  if (unverified) return { ...unverified, usage: data?.usageMetadata || null, raw: data, steps: [] };
   return { content, usage: data?.usageMetadata || null, raw: data, emptyReason: content ? null : { finishReason: candidate.finishReason || "", contentType: typeof candidate?.content, messageKeys: Object.keys(candidate || {}) } };
 }
 

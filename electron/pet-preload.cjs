@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("petBridge", {
   hidePet:         () => ipcRenderer.send("pet:hide"),
   startDrag:       () => ipcRenderer.send("pet:start-drag"),
   moveBy:          (dx, dy) => ipcRenderer.send("pet:move-by", { dx, dy }),
+  sniffAt:         (point) => ipcRenderer.invoke("pet:sniff-at", point || {}),
   setSize:         (w, h) => ipcRenderer.send("pet:set-size", { w, h }),
   setLayout:       (layout) => ipcRenderer.send("pet:set-layout", layout || {}),
   saveChatSize:    (size) => ipcRenderer.send("pet:save-chat-size", size || {}),

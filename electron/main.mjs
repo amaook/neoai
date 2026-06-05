@@ -100,7 +100,7 @@ function createWindow(url) {
       visualEffectState: "active"
     } : {}),
     ...(isWindows ? {
-      backgroundMaterial: "acrylic"
+      backgroundMaterial: "none"
     } : {}),
     webPreferences: {
       contextIsolation: true,
@@ -191,6 +191,88 @@ function updateTrayMenu() {
       }
     }
   ]));
+}
+
+function configureApplicationMenu() {
+  const appName = desktopTestMode ? "neo 测试版" : "neo";
+  const isMac = process.platform === "darwin";
+  const template = [
+    ...(isMac ? [{
+      label: appName,
+      submenu: [
+        { label: `关于 ${appName}`, role: "about" },
+        { type: "separator" },
+        { label: "服务", role: "services" },
+        { type: "separator" },
+        { label: `隐藏 ${appName}`, role: "hide" },
+        { label: "隐藏其他应用", role: "hideOthers" },
+        { label: "显示全部", role: "unhide" },
+        { type: "separator" },
+        { label: `退出 ${appName}`, role: "quit" }
+      ]
+    }] : []),
+    {
+      label: "文件",
+      submenu: [
+        { label: "显示主窗口", click: showMainWindow },
+        {
+          label: "打开工作区文件夹",
+          enabled: Boolean(currentWorkspaceRoot),
+          click: () => { if (currentWorkspaceRoot) shell.openPath(currentWorkspaceRoot); }
+        },
+        { type: "separator" },
+        isMac ? { label: "关闭窗口", role: "close" } : { label: "退出", role: "quit" }
+      ]
+    },
+    {
+      label: "编辑",
+      submenu: [
+        { label: "撤销", role: "undo" },
+        { label: "重做", role: "redo" },
+        { type: "separator" },
+        { label: "剪切", role: "cut" },
+        { label: "复制", role: "copy" },
+        { label: "粘贴", role: "paste" },
+        { label: "全选", role: "selectAll" }
+      ]
+    },
+    {
+      label: "显示",
+      submenu: [
+        { label: "重新载入", role: "reload" },
+        { label: "切换开发者工具", role: "toggleDevTools" },
+        { type: "separator" },
+        { label: "放大", role: "zoomIn" },
+        { label: "缩小", role: "zoomOut" },
+        { label: "实际大小", role: "resetZoom" },
+        { type: "separator" },
+        { label: "全屏", role: "togglefullscreen" }
+      ]
+    },
+    {
+      label: "窗口",
+      submenu: [
+        { label: "最小化", role: "minimize" },
+        { label: "缩放", role: "zoom" },
+        ...(isMac ? [{ type: "separator" }, { label: "置于前方", role: "front" }] : [])
+      ]
+    },
+    {
+      label: "帮助",
+      submenu: [
+        {
+          label: "检查更新",
+          enabled: !desktopTestMode,
+          click: () => checkForUpdates(true, { background: true, interactive: true })
+        },
+        {
+          label: "打开发布页面",
+          click: () => shell.openExternal(latestReleaseUrl)
+        }
+      ]
+    }
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 async function loadPetSettings() {
@@ -835,10 +917,20 @@ async function boot() {
       currentWorkspaceRoot = selected;
       await saveWorkspace(selected);
       return selected;
+    },
+    selectExternalPaths: async (currentWorkspace) => {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: "授权 neo 读取工作区外文件或文件夹",
+        defaultPath: currentWorkspace || currentWorkspaceRoot,
+        properties: ["openFile", "openDirectory", "multiSelections"]
+      });
+      if (result.canceled || !result.filePaths.length) return [];
+      return result.filePaths;
     }
   });
 
   createWindow(serverHandle.url);
+  configureApplicationMenu();
   createTray();
   if (desktopTestMode) {
     setUpdateStatus("测试模式", {
@@ -858,6 +950,121 @@ async function boot() {
 
 const PET_SIZE = 72;
 const PET_MARGIN = 24;
+const PET_SNIFF_RADIUS = 92;
+const PET_DESKTOP_CACHE_MS = 5000;
+let desktopIconCache = { at: 0, icons: [] };
+
+const desktopSensitiveNamePatterns = [
+  /薪资|工资|合同|协议|密码|私密|保密|身份证|银行卡|证件|社保|税务|个税/,
+  /(^|[^a-z0-9])(passwd|password|secret|credential|private|token|salary|payroll|contract|tax|ssn|credit|bank)([^a-z0-9]|$)/i,
+  /(^|[\\/])\.env($|\.|[\\/])/i
+];
+
+const desktopFileQuoteRules = [
+  { exts: new Set(["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "svg"]), quotes: ["这张图有故事", "像是视觉线索", "我闻到图片味"] },
+  { exts: new Set(["xlsx", "xls", "csv", "tsv", "numbers"]), quotes: ["表格味很浓", "这里能算一算", "数据在里面"] },
+  { exts: new Set(["doc", "docx", "pdf", "pages", "md", "txt"]), quotes: ["像是正经资料", "这里有内容", "文字味很足"] },
+  { exts: new Set(["js", "ts", "tsx", "jsx", "py", "mjs", "cjs", "json", "css", "html", "m", "swift"]), quotes: ["闻到代码味", "这里像有逻辑", "小心有 bug"] }
+];
+
+function randomItem(items = []) {
+  return items[Math.floor(Math.random() * items.length)] || "";
+}
+
+function isSensitiveDesktopName(name = "") {
+  return desktopSensitiveNamePatterns.some((pattern) => pattern.test(String(name || "")));
+}
+
+function quoteForDesktopIcon(icon = {}) {
+  if (icon.isFolder) return randomItem(["里面藏着什么", "这个文件夹有点鼓", "像个小仓库"]);
+  const ext = path.extname(icon.name || "").slice(1).toLowerCase();
+  const rule = desktopFileQuoteRules.find((item) => item.exts.has(ext));
+  return randomItem(rule?.quotes || ["这名字有意思", "我记住它了", "像是有用的东西"]);
+}
+
+function parseFinderDesktopIcons(raw = "") {
+  return String(raw || "").split(/\r?\n/).map((line) => {
+    const parts = line.split("\t");
+    if (parts.length < 4) return null;
+    const name = String(parts[0] || "").trim();
+    const x = Number(parts[1]);
+    const y = Number(parts[2]);
+    if (!name || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) return null;
+    const kind = String(parts[3] || "").toLowerCase();
+    return { name, x, y, isFolder: kind.includes("folder") };
+  }).filter(Boolean);
+}
+
+async function readDesktopIcons() {
+  if (process.platform !== "darwin") return [];
+  const now = Date.now();
+  if (now - desktopIconCache.at < PET_DESKTOP_CACHE_MS) return desktopIconCache.icons;
+
+  const script = `
+tell application "Finder"
+  set out to ""
+  try
+    set itemList to items of desktop
+    repeat with itm in itemList
+      try
+        set nm to name of itm
+        set pos to position of itm
+        set kindStr to class of itm as text
+        set out to out & nm & tab & (item 1 of pos) & tab & (item 2 of pos) & tab & kindStr & linefeed
+      end try
+    end repeat
+  end try
+  return out
+end tell
+`;
+
+  try {
+    const { stdout } = await execFileAsync("/usr/bin/osascript", ["-e", script], {
+      timeout: 3000,
+      maxBuffer: 512 * 1024
+    });
+    const icons = parseFinderDesktopIcons(stdout);
+    desktopIconCache = { at: now, icons };
+    return icons;
+  } catch {
+    desktopIconCache = { at: now, icons: [] };
+    return [];
+  }
+}
+
+function nearestDesktopIconAt(point = {}, icons = []) {
+  const x = Number(point.x);
+  const y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  let best = null;
+  let bestDistance = Infinity;
+  for (const icon of icons) {
+    const centerX = icon.x + 32;
+    const centerY = icon.y + 32;
+    const distance = Math.hypot(centerX - x, centerY - y);
+    if (distance < bestDistance) {
+      best = icon;
+      bestDistance = distance;
+    }
+  }
+  return best && bestDistance <= PET_SNIFF_RADIUS ? best : null;
+}
+
+async function sniffDesktopAt(point = {}) {
+  const icons = await readDesktopIcons();
+  const icon = nearestDesktopIconAt(point, icons);
+  if (!icon) return { ok: true, found: false, quote: "这里没闻到文件" };
+  if (isSensitiveDesktopName(icon.name)) {
+    return { ok: true, found: true, sensitive: true, quote: "这个先保密" };
+  }
+  return {
+    ok: true,
+    found: true,
+    sensitive: false,
+    kind: icon.isFolder ? "folder" : "file",
+    quote: quoteForDesktopIcon(icon)
+  };
+}
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -880,12 +1087,18 @@ function normalizedPetLayout(payload = {}) {
   const open = Boolean(payload.open);
   const petW = clamp(Number(payload.petW || petLayoutState.petW || PET_SIZE), PET_SIZE, 180);
   const petH = clamp(Number(payload.petH || petLayoutState.petH || PET_SIZE), PET_SIZE, 220);
+  const bubbleW = clamp(Number(payload.bubbleW || 0), 0, 420);
+  const bubbleH = clamp(Number(payload.bubbleH || 0), 0, 140);
+  const bubbleGap = clamp(Number(payload.bubbleGap || 6), 0, 24);
   const chatW = clamp(Number(payload.chatW || petChatSize.width || 350), 280, 720);
   const chatH = clamp(Number(payload.chatH || petChatSize.height || 450), 320, 900);
   return {
     open,
     petW,
     petH,
+    bubbleW,
+    bubbleH,
+    bubbleGap,
     chatW,
     chatH,
     margin: clamp(Number(payload.margin || 8), 0, 32),
@@ -929,8 +1142,9 @@ function boundsForPetLayout(layout) {
   const placement = choosePetPlacement(layout, anchor, workArea);
   const margin = layout.margin;
   const gap = layout.gap;
-  let width = layout.petW + margin * 2;
-  let height = layout.petH + margin * 2;
+  const hasClosedBubble = !layout.open && layout.bubbleW > 0 && layout.bubbleH > 0;
+  let width = Math.max(layout.petW, hasClosedBubble ? layout.bubbleW + 4 : 0) + margin * 2;
+  let height = layout.petH + margin * 2 + (hasClosedBubble ? layout.bubbleH + layout.bubbleGap : 0);
   let petLocalRight = width - margin;
   let petLocalBottom = height - margin;
 
@@ -1035,6 +1249,9 @@ function setupPetIpc() {
     event.returnValue = serverHandle?.url || "";
   });
 
+  try { ipcMain.removeHandler("pet:sniff-at"); } catch {}
+  ipcMain.handle("pet:sniff-at", async (_, point = {}) => sniffDesktopAt(point));
+
   ipcMain.removeAllListeners("pet:get-settings");
   ipcMain.on("pet:get-settings", (event) => {
     event.returnValue = {
@@ -1099,24 +1316,6 @@ function setupPetIpc() {
       {
         label: "打开主窗口",
         click: () => showMainWindow()
-      },
-      {
-        label: "换头像",
-        click: async () => {
-          const result = await dialog.showOpenDialog({
-            title: "选择桌宠头像",
-            properties: ["openFile"],
-            filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }]
-          });
-          if (!result.canceled && result.filePaths.length) {
-            const img = nativeImage.createFromPath(result.filePaths[0]);
-            if (img.isEmpty()) return;
-            const dataUrl = img.toDataURL();
-            if (petWindow && !petWindow.isDestroyed()) {
-              petWindow.webContents.send("pet:avatar", dataUrl);
-            }
-          }
-        }
       },
       {
         label: "安静模式",

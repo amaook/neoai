@@ -4,12 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>neo</title>
+    <script>
+      document.documentElement.classList.toggle("platform-win", /Windows/i.test(navigator.userAgent));
+    </script>
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   </head>
   <body>
+    <div class="ambient-glow" aria-hidden="true"></div>
+    <canvas id="ambientMotionCanvas" class="ambient-motion" aria-hidden="true"></canvas>
+
     <header class="window-titlebar" aria-label="neo 窗口栏">
       <div class="titlebar-zone titlebar-left">
         <button id="sidebarToggleBtn" class="workspace-toggle titlebar-sidebar-toggle active" type="button" aria-pressed="true" title="收起左侧栏" aria-label="切换左侧栏">
@@ -30,13 +36,15 @@
       <aside id="sidebar" class="sidebar">
         <nav class="side-nav" aria-label="主导航">
           <button id="newChatBtn" class="nav-item active" type="button">
-            <span class="nav-logo">
-              <img src="/assets/logo.png" alt="" />
+            <span class="nav-logo nav-line-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5.5h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3.5A2 2 0 0 1 3 15.5v-8a2 2 0 0 1 2-2Z"/><path d="M8 10h8M8 13.5h5"/></svg>
             </span>
             <strong>新对话</strong>
           </button>
           <button id="scheduleEntryBtn" class="nav-item" type="button">
-            <span class="nav-logo nav-logo-icon">⏱</span>
+            <span class="nav-logo nav-line-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.4 1.8M9 3h6"/></svg>
+            </span>
             <strong>定时任务</strong>
           </button>
         </nav>
@@ -44,7 +52,7 @@
         <!-- 定时任务面板（在左侧栏内展开） -->
         <section id="scheduleSidePanel" class="schedule-side-panel" style="display:none">
           <div class="schedule-side-header">
-            <span>定时自动化</span>
+            <span>neo 内置定时</span>
             <button id="newScheduleBtn" class="ghost-button small" type="button">＋ 新建</button>
           </div>
           <div id="scheduleForm" class="schedule-form" style="display:none">
@@ -81,10 +89,12 @@
 
         <div class="sidebar-footer">
           <button id="settingsToggleBtn" class="settings-entry" type="button">
-            <span>⚙</span>
+            <span class="nav-logo nav-line-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+            </span>
             <strong>设置</strong>
           </button>
-          <span id="appVersionBadge" class="app-version">v0.8.9</span>
+          <span id="appVersionBadge" class="app-version">v0.9.7</span>
         </div>
       </aside>
 
@@ -104,7 +114,7 @@
             <div id="quoteBar" class="quote-bar hidden"></div>
             <textarea id="promptInput" rows="2" placeholder="输入你的问题或任务…" spellcheck="false"></textarea>
             <input type="file" id="fileInput" multiple hidden
-              accept=".txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.go,.rs,.java,.c,.cpp,.h,.sh,.sql,.toml,.env,.pdf,.docx,.doc,.xlsx,.xls,.xlsm,image/*" />
+              accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.go,.rs,.java,.c,.cpp,.h,.sh,.sql,.toml,.env,.pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.xlsm,image/*" />
             <div class="composer-toolbar">
               <button id="attachBtn" class="attach-button" type="button" title="附加文件">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -191,6 +201,14 @@
           <pre id="terminalOutput" class="terminal-output">等待命令</pre>
         </section>
 
+        <footer class="workspace-status-footer" aria-label="工作台状态">
+          <div class="workspace-status-main">
+            <span class="workspace-status-dot" aria-hidden="true"></span>
+            <strong>系统在线</strong>
+          </div>
+          <span id="workspaceStatusVersion">neo-core v0.9.7</span>
+        </footer>
+
       </aside>
     </div>
 
@@ -231,87 +249,222 @@
 
       <header class="sheet-header">
         <h2>设置</h2>
-        <div class="sheet-actions">
-          <span id="updateFeedback" class="sheet-feedback" aria-live="polite"></span>
-          <button id="checkUpdatesBtn" class="ghost-button" type="button">检查更新</button>
-          <button id="environmentBtn" class="ghost-button" type="button">环境检测</button>
-          <button id="closeSettingsBtn" class="ghost-button" type="button">关闭</button>
-        </div>
       </header>
 
-      <section id="updateProgressPanel" class="update-progress-panel" aria-live="polite">
-        <div class="update-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div id="updateProgressFill" class="update-progress-fill"></div>
-        </div>
-        <span id="updateProgressPercent">0%</span>
-      </section>
+      <div class="settings-side">
+        <button id="settingsReturnBtn" class="settings-return" type="button">← 返回应用</button>
+        <nav class="settings-tabs" role="tablist">
+          <button class="settings-tab active" data-settings-tab="model" role="tab" aria-selected="true" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="7" r="2.2"/><circle cx="17" cy="7" r="2.2"/><circle cx="12" cy="17" r="2.2"/><path d="M9.2 7h5.6M8.1 9l2.8 6M15.9 9l-2.8 6"/></svg>
+            <span class="settings-tab-label">模型</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="providers" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v4H5z"/><path d="M5 14.5h14v4H5z"/><path d="M8 7.5h.01M8 16.5h.01M12 7.5h4M12 16.5h4"/></svg>
+            <span class="settings-tab-label">供应商库</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="agent" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="8" r="3.2"/><path d="M4.8 19c.8-3 2.7-4.5 5.2-4.5 1.1 0 2.2.3 3 .9"/><circle cx="17.5" cy="17.5" r="2.4"/><path d="M17.5 14.1v1.1M17.5 19.8v1.1M14.1 17.5h1.1M19.8 17.5h1.1"/></svg>
+            <span class="settings-tab-label">助手设置</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="appearance" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.4"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18"/></svg>
+            <span class="settings-tab-label">外观</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="petdex" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.8 9.8 5.4 5.6 9.6 8"/><path d="M17.2 9.8 18.6 5.6 14.4 8"/><path d="M5.5 13.6C5.5 9.7 8.2 7 12 7s6.5 2.7 6.5 6.6c0 3.5-2.7 5.9-6.5 5.9s-6.5-2.4-6.5-5.9Z"/><path d="M9 13h.01M15 13h.01M10.4 16.2c.9.7 2.3.7 3.2 0"/></svg>
+            <span class="settings-tab-label">桌宠</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="skills" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5h4v11H4V9h4z"/><path d="M8 9h8M12 4v16M16 9v11"/></svg>
+            <span class="settings-tab-label">技能库</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="memory" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.4"/><path d="M9 2.8v3.2M15 2.8v3.2M9 18v3.2M15 18v3.2M2.8 9h3.2M2.8 15h3.2M18 9h3.2M18 15h3.2"/><circle cx="12" cy="12" r="2.2"/></svg>
+            <span class="settings-tab-label">记忆</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="environment" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2.2"/><path d="m7.4 10 2.2 2-2.2 2M12.4 14h2.6M14.8 9.2l1.4 1.4 2.5-2.7"/></svg>
+            <span class="settings-tab-label">环境检测</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="updates" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/></svg>
+            <span class="settings-tab-label">关于</span>
+          </button>
+          <button class="settings-tab" data-settings-tab="archive" role="tab" aria-selected="false" type="button">
+            <svg class="settings-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16v4H4z"/><path d="M6 10.5V18h12v-7.5"/><path d="M10 14h4"/></svg>
+            <span class="settings-tab-label">归档</span>
+          </button>
+        </nav>
+      </div>
 
-      <nav class="settings-tabs" role="tablist">
-        <button class="settings-tab active" data-settings-tab="model" role="tab" aria-selected="true" type="button">模型</button>
-        <button class="settings-tab" data-settings-tab="appearance" role="tab" aria-selected="false" type="button">外观</button>
-        <button class="settings-tab" data-settings-tab="providers" role="tab" aria-selected="false" type="button">供应商库</button>
-        <button class="settings-tab" data-settings-tab="agent" role="tab" aria-selected="false" type="button">智能体</button>
-        <button class="settings-tab" data-settings-tab="skills" role="tab" aria-selected="false" type="button">技能库</button>
-        <button class="settings-tab" data-settings-tab="memory" role="tab" aria-selected="false" type="button">记忆</button>
-        <button class="settings-tab" data-settings-tab="archive" role="tab" aria-selected="false" type="button">归档</button>
-        <button class="settings-tab" data-settings-tab="petdex" role="tab" aria-selected="false" type="button">🐾 桌宠</button>
-      </nav>
+      <!-- ── 关于 ── -->
+      <div class="settings-pane updates-settings-pane" data-settings-pane="updates">
+        <section class="update-brand-panel">
+          <div class="update-brand-mark">
+            <img src="/assets/logo.png" alt="neo" />
+          </div>
+          <h3>关于</h3>
+          <strong>neo <span id="aboutVersionLabel">v0.9.7</span></strong>
+          <button id="checkUpdatesBtn" class="primary-button" type="button">检查更新</button>
+          <span id="updateFeedback" class="sheet-feedback" aria-live="polite"></span>
+          <section id="updateProgressPanel" class="update-progress-panel" aria-live="polite">
+            <div class="update-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="updateProgressFill" class="update-progress-fill"></div>
+            </div>
+            <span id="updateProgressPercent">0%</span>
+          </section>
+          <section class="release-notes-panel" aria-label="版本更新内容">
+            <header>
+              <span>版本更新内容</span>
+              <small>当前版本会在这里列清楚每次升级改了什么</small>
+            </header>
+            <article class="release-note current">
+              <div>
+                <strong>neo 0.9.7</strong>
+                <time>当前版本</time>
+              </div>
+              <ul>
+                <li>macOS 打包时弱化内部 Helper 的对外显示名，减少 Finder 和 Spotlight 搜索 neo 时的误解。</li>
+                <li>保留 Electron Helper 的内部文件名和 bundle id，不影响启动、签名和用户工作区数据。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 0.9.6</strong>
+                <time>办公附件与界面</time>
+              </div>
+              <ul>
+                <li>Office 附件上传限制与办公内核对齐，表格、文档、PDF、PPT 可上传到 25MB。</li>
+                <li>工具与参数设置增加已保存反馈，本地工具、外部读取、授权路径和参数改动后能看到状态。</li>
+                <li>主界面整理为 Codex 风格三栏整体区域，左侧对话、中间聊天、右侧工作台各自成区。</li>
+                <li>关于页增加版本更新内容，后续每次升级都在这里展示具体变化。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 0.9.5</strong>
+                <time>办公稳定性</time>
+              </div>
+              <ul>
+                <li>继续走稳定 Chat Completions，不做 Responses API 重构。</li>
+                <li>新增 Office Task Runtime，文件任务按保存、识别、解析、处理、生成、校验、返回记录步骤。</li>
+                <li>增强 Excel/CSV、Word/PDF、PPT 基础办公内核，生成文件后会重新读取校验。</li>
+                <li>修复空工具参数导致的假完成问题，关键工具失败或命中轮次上限时不再显示完成。</li>
+              </ul>
+            </article>
+          </section>
+        </section>
+      </div>
+
+      <!-- ── 环境检测 ── -->
+      <div class="settings-pane environment-settings-pane" data-settings-pane="environment">
+        <section class="pane-group environment-settings-panel">
+          <header class="environment-pane-header">
+            <div>
+              <div class="pane-group-title">环境检测</div>
+              <p id="environmentSummary">正在检测 neo 运行环境</p>
+            </div>
+          </header>
+          <div id="environmentList" class="environment-list"></div>
+          <pre id="environmentOutput" class="environment-output"></pre>
+          <footer class="modal-actions">
+            <button id="installMissingEnvironmentBtn" class="primary-button" type="button">一键补齐环境</button>
+            <button id="copyEnvironmentCommandBtn" class="ghost-button" type="button">复制命令</button>
+            <button id="recheckEnvironmentBtn" class="primary-button" type="button">重新检测</button>
+          </footer>
+        </section>
+      </div>
 
       <!-- ── 模型 ── -->
-      <div class="settings-pane active" data-settings-pane="model">
-        <div class="pane-group">
-          <div class="pane-group-title">当前模型</div>
-          <label>供应商<select id="activeProviderSelect"></select></label>
-          <label>模型<select id="activeModelSelect"></select></label>
-          <label>自定义模型名<input id="customModelInput" placeholder="留空使用上方选项" spellcheck="false" /></label>
-          <div class="inline-actions">
-            <button id="testApiBtn" class="primary-button" type="button">测试连接</button>
+      <div class="settings-pane model-settings-pane active" data-settings-pane="model">
+        <div class="model-status-bar" aria-label="模型状态">
+          <div class="model-status-tile primary">
+            <span>当前对话</span>
+            <strong id="modelSettingsActiveProviderName">未选择</strong>
+            <small id="modelSettingsActiveModelName">未选择模型</small>
           </div>
-          <pre id="apiTestOutput" class="api-test-output"></pre>
+          <div class="model-status-tile">
+            <span>自动切换</span>
+            <strong id="modelSettingsRouteState">未启用</strong>
+            <small id="modelSettingsRouteSummary">发送时使用当前模型</small>
+          </div>
+          <div class="model-status-tile">
+            <span>连接状态</span>
+            <strong id="modelSettingsKeyState">未配置</strong>
+            <small id="modelSettingsEndpoint">local</small>
+          </div>
         </div>
 
-        <div class="pane-group route-group">
-          <div class="pane-group-title">自动切换模型</div>
-          <div class="route-grid">
-            <label>自动切换<select id="autoModelRoutingSelect">
-              <option value="true">是</option>
-              <option value="false">否</option>
-            </select></label>
-            <label>文字供应商<select id="textRouteProviderSelect"></select></label>
-            <label>文字模型<select id="textRouteModelSelect"></select></label>
-            <label>图片供应商<select id="visionRouteProviderSelect"></select></label>
-            <label>图片模型<select id="visionRouteModelSelect"></select></label>
-          </div>
-          <div id="autoRouteHint" class="route-hint"></div>
-        </div>
+        <div class="model-settings-main">
+          <section class="pane-group model-provider-panel">
+            <div class="pane-group-title pane-group-title-row">
+              <span>供应商</span>
+              <button id="addProviderBtn" class="ghost-button small" type="button">新增</button>
+            </div>
+            <div id="providerList" class="provider-list"></div>
+            <div id="modelOverview" class="model-overview model-overview-hidden"></div>
+          </section>
 
-        <div class="pane-group">
-          <div class="pane-group-title pane-group-title-row">
-            <span>供应商</span>
-            <button id="addProviderBtn" class="ghost-button small" type="button">+ 新增</button>
-          </div>
-          <div id="providerList" class="provider-list"></div>
-          <label>名称<input id="providerNameInput" autocomplete="off" /></label>
-          <label>协议
-            <select id="protocolSelect">
-              <option value="openai">OpenAI 兼容</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="gemini">Gemini</option>
-              <option value="mock">本地演示</option>
-            </select>
-          </label>
-          <label>Base URL<input id="baseUrlInput" spellcheck="false" /></label>
-          <label>API Key<input id="apiKeyInput" type="password" spellcheck="false" /></label>
-          <label>模型列表<textarea id="modelsInput" rows="3" spellcheck="false"></textarea></label>
-          <div class="inline-actions">
-            <button id="saveSettingsBtn" class="primary-button" type="button">保存</button>
-          </div>
-          <div id="saveFeedback" class="save-feedback"></div>
-        </div>
+          <div class="model-config-stack">
+            <section class="pane-group model-current-panel">
+              <div class="pane-group-title">当前模型</div>
+              <div class="model-form-grid">
+                <label>供应商<select id="activeProviderSelect"></select></label>
+                <label>模型<select id="activeModelSelect"></select></label>
+              </div>
+              <label>自定义模型名<input id="customModelInput" placeholder="留空使用上方选项" spellcheck="false" /></label>
+              <div class="model-actions-row">
+                <span>用于普通对话和未命中路由的请求</span>
+                <button id="testApiBtn" class="primary-button" type="button">测试连接</button>
+              </div>
+              <pre id="apiTestOutput" class="api-test-output"></pre>
+            </section>
 
-        <div class="pane-group">
-          <div class="pane-group-title">已配置供应商</div>
-          <div id="modelOverview" class="model-overview"></div>
+            <section class="pane-group model-editor-panel">
+              <div class="pane-group-title">编辑选中的供应商</div>
+              <div class="model-form-grid">
+                <label>名称<input id="providerNameInput" autocomplete="off" /></label>
+                <label>协议
+                  <select id="protocolSelect">
+                    <option value="openai">OpenAI 兼容</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="mock">本地演示</option>
+                  </select>
+                </label>
+              </div>
+              <label>API 模式
+                <select id="apiModeSelect">
+                  <option value="chat_completions">Chat Completions 兼容模式</option>
+                  <option value="responses">Responses API 增强模式（OpenAI）</option>
+                </select>
+              </label>
+              <div class="model-form-grid">
+                <label>Base URL<input id="baseUrlInput" spellcheck="false" /></label>
+                <label>API Key<input id="apiKeyInput" type="password" spellcheck="false" /></label>
+              </div>
+              <label>模型列表<textarea id="modelsInput" rows="3" spellcheck="false"></textarea></label>
+              <div class="model-actions-row">
+                <div id="saveFeedback" class="save-feedback"></div>
+                <button id="saveSettingsBtn" class="primary-button" type="button">保存配置</button>
+              </div>
+            </section>
+
+            <section class="pane-group route-group model-route-panel">
+              <div class="pane-group-title">自动切换</div>
+              <div class="route-grid">
+                <label>开关<select id="autoModelRoutingSelect">
+                  <option value="true">开启</option>
+                  <option value="false">关闭</option>
+                </select></label>
+                <label>文字供应商<select id="textRouteProviderSelect"></select></label>
+                <label>文字模型<select id="textRouteModelSelect"></select></label>
+                <label>图片供应商<select id="visionRouteProviderSelect"></select></label>
+                <label>图片模型<select id="visionRouteModelSelect"></select></label>
+              </div>
+              <div id="autoRouteHint" class="route-hint"></div>
+            </section>
+          </div>
         </div>
       </div>
 
@@ -342,6 +495,16 @@
                 <span id="appearanceBlurValue" class="range-value">30px</span>
               </span>
             </label>
+          </div>
+          <div class="stitch-adapt-notes" aria-label="Stitch 适配方案">
+            <article>
+              <strong>Luminous 浅色工作台</strong>
+              <span>吸收三栏玻璃、底部输入胶囊、右侧状态卡片，作为当前主界面的增强方向。</span>
+            </article>
+            <article>
+              <strong>Neural 终端质感</strong>
+              <span>只用于终端、工具日志和运行状态，不覆盖 neo 的浅色默认外观。</span>
+            </article>
           </div>
         </div>
 
@@ -472,7 +635,10 @@
         </div>
 
         <div class="pane-group">
-          <div class="pane-group-title">工具与参数</div>
+          <div class="pane-group-title pane-group-title-row">
+            <span>工具与参数</span>
+            <small id="toolSettingsFeedback" class="inline-settings-feedback" aria-live="polite"></small>
+          </div>
           <label class="toggle-row">
             <span>
               <strong>本地工具</strong>
@@ -480,6 +646,20 @@
             </span>
             <input id="agentToolsToggle" type="checkbox" />
           </label>
+          <label class="toggle-row">
+            <span>
+              <strong>外部文件读取</strong>
+              <small>允许模型读取你授权的工作区外文件或文件夹</small>
+            </span>
+            <input id="externalReadToggle" type="checkbox" />
+          </label>
+          <div class="external-paths-box">
+            <div class="pane-group-title-row">
+              <label for="externalPathsInput">授权路径</label>
+              <button class="ghost-button small" type="button" id="selectExternalPathsBtn">选择</button>
+            </div>
+            <textarea id="externalPathsInput" rows="3" spellcheck="false" placeholder="/Users/li/Desktop/文件.xlsx"></textarea>
+          </div>
           <div class="settings-grid">
             <label>温度<input id="temperatureInput" type="number" step="0.1" min="0" max="2" /></label>
             <label>最大输出<input id="maxTokensInput" type="number" step="128" min="0" /></label>
@@ -633,16 +813,20 @@
         <header class="modal-header">
           <div>
             <h2 id="environmentTitle">环境检测</h2>
-            <p id="environmentSummary">正在检测 neo 运行环境</p>
+            <p id="environmentModalSummary">正在检测 neo 运行环境</p>
           </div>
           <button id="closeEnvironmentBtn" class="ghost-button" type="button">关闭</button>
         </header>
-        <div id="environmentList" class="environment-list"></div>
-        <pre id="environmentOutput" class="environment-output"></pre>
+        <div id="environmentModalList" class="environment-list"></div>
+        <pre id="environmentModalOutput" class="environment-output"></pre>
+        <label class="environment-no-prompt">
+          <input id="environmentNoPromptCheck" type="checkbox" />
+          <span>不再提示</span>
+        </label>
         <footer class="modal-actions">
-          <button id="installMissingEnvironmentBtn" class="primary-button" type="button">一键补齐环境</button>
-          <button id="copyEnvironmentCommandBtn" class="ghost-button" type="button">复制命令</button>
-          <button id="recheckEnvironmentBtn" class="primary-button" type="button">重新检测</button>
+          <button id="modalInstallMissingEnvironmentBtn" class="primary-button" type="button">一键补齐环境</button>
+          <button id="modalCopyEnvironmentCommandBtn" class="ghost-button" type="button">复制命令</button>
+          <button id="modalRecheckEnvironmentBtn" class="primary-button" type="button">重新检测</button>
         </footer>
       </section>
     </div>

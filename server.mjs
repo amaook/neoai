@@ -31,6 +31,7 @@ export function startServer(options = {}) {
 
   // Electron 桌面回调
   if (options.selectWorkspaceRoot)    ctx.selectWorkspaceRoot    = options.selectWorkspaceRoot;
+  if (options.selectExternalPaths)    ctx.selectExternalPaths    = options.selectExternalPaths;
   if (options.openWorkspacePath)      ctx.openWorkspacePath      = options.openWorkspacePath;
   if (options.showWorkspacePath)      ctx.showWorkspacePath      = options.showWorkspacePath;
   if (options.openExternalUrl)        ctx.openExternalUrl        = options.openExternalUrl;

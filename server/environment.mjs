@@ -1,5 +1,5 @@
 // server/environment.mjs — 环境检测与安装脚本生成
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -207,10 +207,29 @@ function powerShellQuote(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
+async function writeTempInstallScript(command) {
+  const fileName = `neo-ai-install-${process.pid}-${Date.now()}.ps1`;
+  const candidates = [
+    ctx.appStatePath ? path.join(path.dirname(ctx.appStatePath), "tmp") : "",
+    path.join(os.tmpdir(), "neo-ai")
+  ].filter(Boolean);
+  let lastError = null;
+  for (const dir of candidates) {
+    try {
+      await mkdir(dir, { recursive: true });
+      const scriptPath = path.join(dir, fileName);
+      await writeFile(scriptPath, command, "utf8");
+      return scriptPath;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("无法写入临时安装脚本");
+}
+
 export async function openTerminalCommand(command) {
   if (process.platform === "win32") {
-    const scriptPath = path.join(os.tmpdir(), `neo-ai-install-${Date.now()}.ps1`);
-    await writeFile(scriptPath, command, "utf8");
+    const scriptPath = await writeTempInstallScript(command);
     const launchCommand = [`$arguments = @('-NoExit','-ExecutionPolicy','Bypass','-File',${powerShellQuote(scriptPath)})`, "Start-Process", "-FilePath powershell.exe", "-ArgumentList $arguments", "-Verb RunAs"].join(" ");
     return new Promise((resolve) => {
       execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", launchCommand], { timeout: 10000 }, (error, stdout, stderr) => { resolve({ ok: !error, stdout: trimOutput(stdout), stderr: trimOutput(stderr), message: error?.message || "已打开 PowerShell 安装窗口", command }); });

@@ -22,9 +22,20 @@ const DEFAULT_CHAT_SIZE = { width: 350, height: 450 };
 const CHAT_SIZE_LIMITS = { minW: 280, maxW: 720, minH: 320, maxH: 900 };
 const PET_LAYOUT_MARGIN = 8;
 const PET_LAYOUT_GAP = 10;
+const PET_BUBBLE_GAP = 6;
 const ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024;
+const OFFICE_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
+const OFFICE_ATTACHMENT_KINDS = new Set(["pdf", "sheet", "doc", "ppt"]);
 const PETDEX_RENDER_WIDTH = 96;
 const PETDEX_WINDOW_PADDING = 16;
+const PET_BEHAVIOR_TICK_MS = 120;
+const PET_BEHAVIOR_IDLE_DELAY_MS = 14000;
+const PET_BEHAVIOR_WALK_MIN_MS = 3600;
+const PET_BEHAVIOR_WALK_MAX_MS = 7600;
+const PET_BEHAVIOR_QUOTE_MIN_MS = 36000;
+const PET_BEHAVIOR_QUOTE_MAX_MS = 82000;
+const PET_BEHAVIOR_STEP_MIN = 1.3;
+const PET_BEHAVIOR_STEP_MAX = 3.1;
 const TEXT_EXTS = new Set([
   "txt", "md", "markdown", "csv", "tsv", "json", "jsonl", "xml", "html", "css", "js", "jsx", "ts", "tsx",
   "py", "rb", "go", "rs", "java", "c", "cpp", "h", "hpp", "sh", "zsh", "yaml", "yml", "toml", "ini", "log"
@@ -43,9 +54,20 @@ let currentPlacement = "closed";
 let lastPetDisplaySize = { ...DEFAULT_PET_WINDOW };
 let pendingAttachments = [];
 let petChatHistory = [];
+let activePetChatController = null;
 let resizeState = null;
 let closeLayoutTimer = null;
 let dragDepth = 0;
+let petDragDepth = 0;
+let petBehaviorTimer = null;
+let petBehaviorMode = "idle";
+let petBehaviorUntil = 0;
+let petBehaviorNextAt = 0;
+let petBehaviorDirection = 1;
+let petBehaviorStep = 2;
+let lastPetQuote = "";
+let petMoodTimer = null;
+let petClassTimers = new Map();
 
 const STATE_LABELS = {
   idle:      null,
@@ -64,6 +86,38 @@ const PETDEX_STATE_ANIMATIONS = {
   done:      { row: 4, frames: 5, durationMs: 840 },
   error:     { row: 5, frames: 8, durationMs: 1220 }
 };
+
+const PET_IDLE_QUOTES = [
+  "我去巡一小圈",
+  "桌面空气不错",
+  "有事叫我就行",
+  "我在旁边待命",
+  "刚刚眨了个眼",
+  "今天也要稳稳的",
+  "我闻到一个新任务",
+  "要不要整理点什么？"
+];
+
+const PET_DONE_QUOTES = [
+  "搞定啦",
+  "任务完成",
+  "收工，漂亮",
+  "这下顺了"
+];
+
+const PET_ERROR_QUOTES = [
+  "我卡了一下",
+  "这里出错了",
+  "换个姿势再来",
+  "我需要你看一眼"
+];
+
+const PET_FEED_QUOTES = [
+  "嗯？给我吃的？",
+  "放这里，我看看",
+  "我接住啦",
+  "嚼嚼预备"
+];
 
 function clampNumber(value, min, max) {
   const number = Number(value);
@@ -106,6 +160,14 @@ function getPetDisplaySize() {
   return { ...lastPetDisplaySize };
 }
 
+function getBubbleLayoutSize() {
+  if (!bubble.classList.contains("visible")) return { w: 0, h: 0, gap: 0 };
+  const rect = bubble.getBoundingClientRect();
+  const w = Math.ceil(Math.max(rect.width || 0, bubble.scrollWidth || 0));
+  const h = Math.ceil(Math.max(rect.height || 0, bubble.scrollHeight || 0));
+  return { w, h, gap: PET_BUBBLE_GAP };
+}
+
 function applyLayoutPlacement(placement = currentPlacement) {
   currentPlacement = placement || "closed";
   root.classList.remove("chat-above", "chat-left", "chat-right", "chat-closed");
@@ -119,10 +181,14 @@ function applyLayoutPlacement(placement = currentPlacement) {
 function requestPetLayout({ saveChatSize = false, deferClosed = false } = {}) {
   if (!window.petBridge) return;
   const petSize = getPetDisplaySize();
+  const bubbleSize = getBubbleLayoutSize();
   const layout = {
     open: chatOpen,
     petW: petSize.w,
     petH: petSize.h,
+    bubbleW: bubbleSize.w,
+    bubbleH: bubbleSize.h,
+    bubbleGap: bubbleSize.gap,
     chatW: chatSize.width,
     chatH: chatSize.height,
     margin: PET_LAYOUT_MARGIN,
@@ -136,10 +202,12 @@ function requestPetLayout({ saveChatSize = false, deferClosed = false } = {}) {
     return;
   }
 
-  const width = chatOpen ? Math.max(chatSize.width, petSize.w) + PET_LAYOUT_MARGIN * 2 : petSize.w + PET_LAYOUT_MARGIN * 2;
+  const closedW = Math.max(petSize.w, bubbleSize.w ? bubbleSize.w + 4 : 0) + PET_LAYOUT_MARGIN * 2;
+  const closedH = petSize.h + PET_LAYOUT_MARGIN * 2 + (bubbleSize.h ? bubbleSize.h + PET_BUBBLE_GAP : 0);
+  const width = chatOpen ? Math.max(chatSize.width, petSize.w) + PET_LAYOUT_MARGIN * 2 : closedW;
   const height = chatOpen
     ? chatSize.height + petSize.h + PET_LAYOUT_GAP + PET_LAYOUT_MARGIN * 2
-    : petSize.h + PET_LAYOUT_MARGIN * 2;
+    : closedH;
   if (!deferClosed || chatOpen) window.petBridge.setSize(width, height);
 }
 
@@ -295,7 +363,7 @@ function setState(state) {
   currentState = state;
   syncRootClass();
   restartPetdexAnimation();
-  if (!quietMode) showBubble(STATE_LABELS[state]);
+  handlePetStateChange(state);
   // 自动回到 idle
   if (state === "done" || state === "error") {
     setTimeout(() => { if (currentState === state) setState("idle"); }, 2500);
@@ -306,8 +374,150 @@ function showBubble(text) {
   if (!text || quietMode) { bubble.classList.remove("visible"); return; }
   bubble.textContent = text;
   bubble.classList.add("visible");
+  requestAnimationFrame(() => updatePetWindowSize());
   clearTimeout(bubble._timer);
-  bubble._timer = setTimeout(() => bubble.classList.remove("visible"), 3000);
+  bubble._timer = setTimeout(() => {
+    bubble.classList.remove("visible");
+    requestAnimationFrame(() => updatePetWindowSize());
+  }, 3000);
+}
+
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function pickPetQuote(pool) {
+  const filtered = pool.filter((quote) => quote !== lastPetQuote);
+  const quote = filtered[Math.floor(Math.random() * filtered.length)] || pool[0] || "";
+  lastPetQuote = quote;
+  return quote;
+}
+
+function prefersReducedPetMotion() {
+  try {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
+  } catch {
+    return false;
+  }
+}
+
+function clearPetMood() {
+  root.classList.remove("pet-mood-curious", "pet-mood-feeding", "pet-mood-proud", "pet-mood-startled");
+}
+
+function setPetMood(mood = "", duration = 0) {
+  clearPetMood();
+  clearTimeout(petMoodTimer);
+  if (mood) root.classList.add(`pet-mood-${mood}`);
+  if (mood && duration > 0) {
+    petMoodTimer = setTimeout(clearPetMood, duration);
+  }
+}
+
+function pulsePetClass(className, duration = 700) {
+  root.classList.add(className);
+  clearTimeout(petClassTimers.get(className));
+  petClassTimers.set(className, setTimeout(() => {
+    root.classList.remove(className);
+    petClassTimers.delete(className);
+  }, duration));
+}
+
+function stopPetWalk() {
+  if (petBehaviorMode !== "walking") return;
+  petBehaviorMode = "idle";
+  petBehaviorUntil = 0;
+  root.classList.remove("pet-walking");
+}
+
+function notePetInteraction({ stopWalk = true } = {}) {
+  petBehaviorNextAt = Date.now() + PET_BEHAVIOR_IDLE_DELAY_MS + randomBetween(0, 8000);
+  if (stopWalk) stopPetWalk();
+}
+
+function canRunPetBehavior() {
+  return Boolean(window.petBridge)
+    && !quietMode
+    && !chatOpen
+    && !dragging
+    && !resizeState
+    && !streaming
+    && currentState === "idle"
+    && !prefersReducedPetMotion();
+}
+
+function scheduleNextPetBehavior(baseDelay = PET_BEHAVIOR_QUOTE_MIN_MS) {
+  petBehaviorNextAt = Date.now() + randomBetween(baseDelay, PET_BEHAVIOR_QUOTE_MAX_MS);
+}
+
+function startPetWalk() {
+  if (!canRunPetBehavior()) return;
+  petBehaviorMode = "walking";
+  petBehaviorUntil = Date.now() + randomBetween(PET_BEHAVIOR_WALK_MIN_MS, PET_BEHAVIOR_WALK_MAX_MS);
+  petBehaviorDirection = Math.random() < 0.5 ? -1 : 1;
+  petBehaviorStep = randomBetween(PET_BEHAVIOR_STEP_MIN, PET_BEHAVIOR_STEP_MAX);
+  root.classList.add("pet-walking");
+  root.classList.toggle("pet-facing-left", petBehaviorDirection < 0);
+  root.classList.toggle("pet-facing-right", petBehaviorDirection > 0);
+  if (Math.random() < 0.35) showBubble(pickPetQuote(PET_IDLE_QUOTES));
+}
+
+function tickPetBehavior() {
+  const now = Date.now();
+  if (!canRunPetBehavior()) {
+    stopPetWalk();
+    if (petBehaviorNextAt < now + PET_BEHAVIOR_IDLE_DELAY_MS) notePetInteraction({ stopWalk: false });
+    return;
+  }
+
+  if (petBehaviorMode === "walking") {
+    if (now >= petBehaviorUntil) {
+      stopPetWalk();
+      scheduleNextPetBehavior();
+      return;
+    }
+    if (Math.random() < 0.018) {
+      petBehaviorDirection *= -1;
+      root.classList.toggle("pet-facing-left", petBehaviorDirection < 0);
+      root.classList.toggle("pet-facing-right", petBehaviorDirection > 0);
+    }
+    window.petBridge?.moveBy?.(petBehaviorStep * petBehaviorDirection, 0);
+    return;
+  }
+
+  if (!petBehaviorNextAt) scheduleNextPetBehavior(PET_BEHAVIOR_IDLE_DELAY_MS);
+  if (now < petBehaviorNextAt) return;
+
+  if (Math.random() < 0.52) {
+    showBubble(pickPetQuote(PET_IDLE_QUOTES));
+    setPetMood("curious", 1800);
+    scheduleNextPetBehavior();
+  } else {
+    startPetWalk();
+  }
+}
+
+function startPetBehaviorLoop() {
+  if (petBehaviorTimer) return;
+  scheduleNextPetBehavior(PET_BEHAVIOR_IDLE_DELAY_MS);
+  petBehaviorTimer = setInterval(tickPetBehavior, PET_BEHAVIOR_TICK_MS);
+}
+
+function handlePetStateChange(state) {
+  if (state !== "idle") notePetInteraction();
+  if (state === "done") {
+    setPetMood("proud", 1600);
+    pulsePetClass("pet-celebrate", 900);
+    showBubble(pickPetQuote(PET_DONE_QUOTES));
+    return;
+  }
+  if (state === "error") {
+    setPetMood("startled", 1800);
+    pulsePetClass("pet-startle", 900);
+    showBubble(pickPetQuote(PET_ERROR_QUOTES));
+    return;
+  }
+  showBubble(STATE_LABELS[state]);
 }
 
 // 订阅服务端状态 SSE
@@ -331,6 +541,7 @@ function subscribeState() {
 
 function openChat() {
   if (chatOpen) return;
+  notePetInteraction();
   chatOpen = true;
   clearTimeout(closeLayoutTimer);
   syncRootClass();
@@ -342,6 +553,7 @@ function openChat() {
 
 function closeChat() {
   if (!chatOpen) return;
+  notePetInteraction();
   chatOpen = false;
   chat.classList.remove("open");
   syncRootClass();
@@ -356,9 +568,31 @@ function toggleChat() {
   else openChat();
 }
 
+function cleanPetVisibleText(value = "", options = {}) {
+  const trim = options.trim !== false;
+  const lines = String(value || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n");
+  let inFence = false;
+  const cleaned = [];
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      cleaned.push(line);
+      continue;
+    }
+    if (!inFence && /^\s*-{2,}\s*$/.test(line)) continue;
+    cleaned.push(line.replace(/[ \t]+$/g, ""));
+  }
+  const text = cleaned.join("\n").replace(/\n{4,}/g, "\n\n\n");
+  return trim ? text.trim() : text;
+}
+
 function setMsgText(element, text) {
   const textEl = element.querySelector(".pet-msg-text") || element;
-  textEl.textContent = text;
+  const shouldClean = element.classList?.contains("assistant");
+  textEl.textContent = shouldClean ? cleanPetVisibleText(text) : text;
 }
 
 function appendMsg(role, text, attachments = []) {
@@ -366,7 +600,7 @@ function appendMsg(role, text, attachments = []) {
   div.className = `pet-msg ${role}`;
   const textEl = document.createElement("div");
   textEl.className = "pet-msg-text";
-  textEl.textContent = text;
+  textEl.textContent = role === "assistant" ? cleanPetVisibleText(text) : text;
   div.appendChild(textEl);
   appendMessageAttachments(div, attachments);
   msgs.appendChild(div);
@@ -407,20 +641,25 @@ function attachmentKindFromFile(file) {
   const mediaType = String(file?.type || "");
   if (mediaType.startsWith("image/")) return "image";
   if (ext === "pdf" || mediaType === "application/pdf") return "pdf";
-  if (["xlsx", "xls", "xlsm"].includes(ext)) return "sheet";
+  if (["xlsx", "xls", "xlsm", "csv", "tsv"].includes(ext)) return "sheet";
   if (["docx", "doc"].includes(ext)) return "doc";
+  if (["pptx", "ppt"].includes(ext)) return "ppt";
   if (TEXT_EXTS.has(ext) || mediaType.startsWith("text/")) return "text";
   return "file";
 }
 
 function attachmentKindLabel(kind = "file") {
-  const labels = { image: "图片", pdf: "PDF", sheet: "表格", doc: "文档", text: "文本", file: "文件" };
+  const labels = { image: "图片", pdf: "PDF", sheet: "表格", doc: "文档", ppt: "PPT", text: "文本", file: "文件" };
   return labels[kind] || "文件";
 }
 
 function fileIcon(kind = "file") {
-  const labels = { image: "IMG", pdf: "PDF", sheet: "XLS", doc: "DOC", text: "TXT", file: "FILE" };
+  const labels = { image: "IMG", pdf: "PDF", sheet: "XLS", doc: "DOC", ppt: "PPT", text: "TXT", file: "FILE" };
   return labels[kind] || "FILE";
+}
+
+function attachmentMaxBytesForKind(kind = "file") {
+  return OFFICE_ATTACHMENT_KINDS.has(kind) ? OFFICE_ATTACHMENT_MAX_BYTES : ATTACHMENT_MAX_BYTES;
 }
 
 function readAsDataUrl(file) {
@@ -447,8 +686,9 @@ async function processPetFile(file) {
   const fallbackName = kind === "image" ? `pasted-image-${Date.now()}.png` : `attachment-${Date.now()}`;
   const name = String(file.name || fallbackName).trim() || fallbackName;
   const size = Number(file.size || 0);
-  if (size > ATTACHMENT_MAX_BYTES) {
-    showBubble(`「${name}」超过 8MB，已跳过`);
+  const maxBytes = attachmentMaxBytesForKind(kind);
+  if (size > maxBytes) {
+    showBubble(`「${name}」超过 ${formatBytes(maxBytes)}，已跳过`);
     return null;
   }
 
@@ -488,6 +728,18 @@ async function handlePetFiles(fileList) {
   renderPetAttachmentBar();
   const added = pendingAttachments.length - before;
   if (added > 0) showBubble(`已添加 ${added} 个附件`);
+}
+
+async function feedPetFiles(fileList) {
+  const before = pendingAttachments.length;
+  await handlePetFiles(fileList);
+  const added = pendingAttachments.length - before;
+  if (added <= 0) return;
+  setPetMood("feeding", 1200);
+  pulsePetClass("pet-fed", 900);
+  showBubble(`嚼嚼…已吃下 ${added} 个`);
+  if (!chatOpen) openChat();
+  requestAnimationFrame(() => input.focus());
 }
 
 function renderPetAttachmentBar() {
@@ -641,6 +893,26 @@ function readChatConfig() {
   return { state, provider, model };
 }
 
+function normalizeToolConsent(value = {}) {
+  const input = value && typeof value === "object" ? value : {};
+  return {
+    fileRead: input.fileRead !== false,
+    fileWrite: input.fileWrite === true,
+    web: input.web === true,
+    desktop: input.desktop === true,
+    command: input.command === true
+  };
+}
+
+function setPetStreaming(active) {
+  streaming = Boolean(active);
+  sendBtn.disabled = false;
+  sendBtn.classList.toggle("is-cancel", streaming);
+  sendBtn.textContent = streaming ? "■" : "↑";
+  sendBtn.title = streaming ? "停止回答" : "发送";
+  sendBtn.setAttribute("aria-label", streaming ? "停止回答" : "发送");
+}
+
 function buildPetRequestMessages(provider, model) {
   const state = readNeoState();
   const systemPrompt = String(state.systemPrompt || "你是 neo 的桌宠助手。请用自然、简洁的中文帮助用户，必要时读取用户附加的文件信息。").trim();
@@ -660,13 +932,16 @@ function buildPetRequestMessages(provider, model) {
 
 async function sendChat(text, attachments = []) {
   if ((!text.trim() && !attachments.length) || streaming) return;
-  streaming = true;
-  sendBtn.disabled = true;
+  const controller = new AbortController();
+  activePetChatController = controller;
+  setPetStreaming(true);
   appendMsg("user", text || "请查看附件", attachments);
 
   const assistantDiv = appendMsg("assistant", "");
   assistantDiv.classList.add("streaming");
   msgs.scrollTop = msgs.scrollHeight;
+  let fullContent = "";
+  let finalContent = "";
 
   // 获取当前活跃的供应商/模型配置
   const { state, provider, model } = readChatConfig();
@@ -674,6 +949,7 @@ async function sendChat(text, attachments = []) {
   try {
     setState("thinking");
     const importedAttachments = await importPetAttachments(attachments);
+    if (controller.signal.aborted) throw Object.assign(new Error("已停止"), { name: "AbortError" });
     const userMessage = {
       role: "user",
       content: text || "请查看附件",
@@ -694,8 +970,10 @@ async function sendChat(text, attachments = []) {
         thinking: state.thinking || "balanced",
         enableTools: Boolean(state.agentTools),
         enabledSkills: Array.isArray(state.enabledSkills) ? state.enabledSkills : [],
+        toolConsent: normalizeToolConsent(state.toolConsent),
         stream: true
-      })
+      }),
+      signal: controller.signal
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -705,8 +983,6 @@ async function sendChat(text, attachments = []) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
-    let fullContent = "";
-    let finalContent = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -721,7 +997,7 @@ async function sendChat(text, attachments = []) {
         try { event = JSON.parse(trimmed.slice(5).trim()); } catch { continue; }
         if (event.type === "delta" && event.text) {
           fullContent += event.text;
-          setMsgText(assistantDiv, fullContent);
+          setMsgText(assistantDiv, cleanPetVisibleText(fullContent, { trim: false }));
           msgs.scrollTop = msgs.scrollHeight;
         } else if (event.type === "tool_start" || event.type === "skill_start" || event.type === "skill_step") {
           setState("working");
@@ -734,26 +1010,48 @@ async function sendChat(text, attachments = []) {
     }
 
     assistantDiv.classList.remove("streaming");
-    const reply = finalContent || fullContent || "(没有收到回复，请检查 API Key)";
+    const reply = cleanPetVisibleText(finalContent || fullContent || "(没有收到回复，请检查 API Key)");
     setMsgText(assistantDiv, reply);
     petChatHistory.push({ role: "assistant", content: reply });
     setState("done");
   } catch (err) {
     assistantDiv.classList.remove("streaming");
+    if (err.name === "AbortError" || controller.signal.aborted) {
+      const reply = fullContent ? `${cleanPetVisibleText(fullContent)}\n\n（已停止）` : "已停止";
+      setMsgText(assistantDiv, reply);
+      if (fullContent) petChatHistory.push({ role: "assistant", content: reply });
+      setState("idle");
+      return;
+    }
     setMsgText(assistantDiv, `请求失败：${err.message}`);
     setState("error");
   } finally {
-    streaming = false;
-    sendBtn.disabled = false;
+    if (activePetChatController === controller) activePetChatController = null;
+    setPetStreaming(false);
   }
 }
 
 // ── 事件绑定 ──────────────────────────────────────────────────────
 
 // 拖动头像移动窗口（移动超过 4px 视为拖动，不触发 click）
-let dragStartX = 0, dragStartY = 0, dragging = false, hasDragged = false;
+let dragStartX = 0, dragStartY = 0, dragging = false, hasDragged = false, sniffInFlight = false;
+async function sniffDesktopAt(point = {}) {
+  if (!window.petBridge?.sniffAt || sniffInFlight) return;
+  sniffInFlight = true;
+  try {
+    setPetMood("curious", 1400);
+    const result = await window.petBridge.sniffAt(point);
+    if (result?.quote) showBubble(result.quote);
+  } catch {
+    showBubble("没闻出来");
+  } finally {
+    sniffInFlight = false;
+  }
+}
+
 avatar.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
+  notePetInteraction();
   dragging = true;
   hasDragged = false;
   dragStartX = e.screenX;
@@ -770,19 +1068,29 @@ document.addEventListener("mousemove", (e) => {
   dragStartY = e.screenY;
   if (window.petBridge) window.petBridge.moveBy(dx, dy);
 });
-document.addEventListener("mouseup", () => { dragging = false; });
+document.addEventListener("mouseup", (e) => {
+  const shouldSniff = dragging && hasDragged && !chatOpen;
+  dragging = false;
+  if (!shouldSniff) return;
+  sniffDesktopAt({ x: e.screenX, y: e.screenY });
+  setTimeout(() => {
+    if (!dragging) hasDragged = false;
+  }, 260);
+});
 
 // 点击头像：展开/收起聊天框（拖动后不触发）
 avatar.addEventListener("click", (e) => {
   if (hasDragged) { hasDragged = false; return; }
   e.preventDefault();
   e.stopPropagation();
+  pulsePetClass("pet-tapped", 520);
   toggleChat();
 }, false);
 
 // 阻止头像上的右键冒泡，交给 contextmenu 处理
 avatar.addEventListener("contextmenu", (e) => {
   e.preventDefault();
+  notePetInteraction();
   if (window.petBridge) window.petBridge.showContextMenu();
 });
 
@@ -792,9 +1100,14 @@ closeBtn.addEventListener("click", () => {
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
+  if (streaming) {
+    activePetChatController?.abort();
+    return;
+  }
   const text = input.value.trim();
   const attachments = [...pendingAttachments];
   if (!text && !attachments.length) return;
+  notePetInteraction();
   input.value = "";
   pendingAttachments = [];
   renderPetAttachmentBar();
@@ -808,6 +1121,11 @@ function isFileDrag(event) {
 function clearPetDragHint() {
   dragDepth = 0;
   chat.classList.remove("drag-over");
+}
+
+function clearAvatarDragHint() {
+  petDragDepth = 0;
+  root.classList.remove("pet-feed-over");
 }
 
 chat.addEventListener("dragenter", (event) => {
@@ -832,6 +1150,7 @@ chat.addEventListener("dragleave", (event) => {
 chat.addEventListener("drop", async (event) => {
   if (!isFileDrag(event)) return;
   event.preventDefault();
+  notePetInteraction();
   clearPetDragHint();
   await handlePetFiles(event.dataTransfer.files);
 });
@@ -843,7 +1162,45 @@ chat.addEventListener("paste", async (event) => {
     .filter(Boolean);
   if (!imageFiles.length) return;
   event.preventDefault();
+  notePetInteraction();
   await handlePetFiles(imageFiles);
+});
+
+avatar.addEventListener("dragenter", (event) => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  notePetInteraction();
+  petDragDepth += 1;
+  root.classList.add("pet-feed-over");
+  setPetMood("feeding");
+  if (petDragDepth === 1) showBubble(pickPetQuote(PET_FEED_QUOTES));
+});
+
+avatar.addEventListener("dragover", (event) => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer.dropEffect = "copy";
+});
+
+avatar.addEventListener("dragleave", (event) => {
+  if (!isFileDrag(event)) return;
+  event.stopPropagation();
+  petDragDepth = Math.max(0, petDragDepth - 1);
+  if (!petDragDepth) {
+    clearAvatarDragHint();
+    setPetMood("", 0);
+  }
+});
+
+avatar.addEventListener("drop", async (event) => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  notePetInteraction();
+  clearAvatarDragHint();
+  await feedPetFiles(event.dataTransfer.files);
 });
 
 function startChatResize(event) {
@@ -902,6 +1259,12 @@ if (window.petBridge) {
   window.petBridge.onQuietMode((v) => {
     quietMode = v;
     if (v) bubble.classList.remove("visible");
+    if (v) {
+      stopPetWalk();
+      clearPetMood();
+    } else {
+      notePetInteraction({ stopWalk: false });
+    }
   });
 
   window.petBridge.onLayout((layout = {}) => {
@@ -1111,6 +1474,7 @@ applyChatSize();
 setPetDisplaySize(DEFAULT_PET_WINDOW.w, DEFAULT_PET_WINDOW.h);
 syncRootClass();
 requestPetLayout();
+startPetBehaviorLoop();
 setupProfileSync();
 hydrateStateFromServer().finally(() => {
   loadPetdexFromState();

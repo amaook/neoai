@@ -116,6 +116,21 @@ def selected_indexes(header, columns):
     return [index[col] for col in columns if col in index]
 
 
+def auto_indexes(header, kind):
+    if kind == "amount":
+        tokens = ("金额", "收入", "支出", "费用", "成本", "利润", "价格", "单价", "总价", "余额", "amount", "price", "revenue", "cost", "profit", "fee", "money")
+    elif kind == "date":
+        tokens = ("日期", "时间", "年月", "月份", "date", "time", "day", "month")
+    else:
+        tokens = ()
+    result = []
+    for idx, name in enumerate(header):
+        text = str(name or "").strip().lower()
+        if any(token.lower() in text for token in tokens):
+            result.append(idx)
+    return result
+
+
 def coerce_number(value):
     if is_empty(value):
         return None
@@ -248,7 +263,7 @@ def apply_operation(rows, operation):
 
     if op_type == "normalize_amount":
         cols = operation.get("columns") or []
-        target = selected_indexes(header, cols)
+        target = selected_indexes(header, cols) if cols else auto_indexes(header, "amount")
         for row in body:
             for idx in target:
                 row[idx] = coerce_number(row[idx] if idx < len(row) else None)
@@ -256,7 +271,7 @@ def apply_operation(rows, operation):
 
     if op_type == "normalize_date":
         cols = operation.get("columns") or []
-        target = selected_indexes(header, cols)
+        target = selected_indexes(header, cols) if cols else auto_indexes(header, "date")
         for row in body:
             for idx in target:
                 row[idx] = coerce_date(row[idx] if idx < len(row) else None)
@@ -281,8 +296,12 @@ def default_operations(options):
         ops.append({"type": "drop_empty_columns"})
     if options.get("trim_text", True):
         ops.append({"type": "trim_text"})
-    if options.get("drop_duplicates"):
+    if options.get("drop_duplicates", True):
         ops.append({"type": "drop_duplicates", "columns": options.get("duplicate_columns") or []})
+    if options.get("normalize_amount", True):
+        ops.append({"type": "normalize_amount", "columns": options.get("amount_columns") or []})
+    if options.get("normalize_date", True):
+        ops.append({"type": "normalize_date", "columns": options.get("date_columns") or []})
     if "fill_empty" in options:
         ops.append({"type": "fill_empty", "value": options.get("fill_empty")})
     return ops
