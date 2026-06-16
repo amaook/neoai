@@ -1,7 +1,8 @@
-import { app, BrowserWindow, dialog, shell, Notification, Tray, Menu, nativeImage, screen, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, shell, Notification, Tray, Menu, nativeImage, screen, ipcMain, desktopCapturer } from "electron";
 import electronUpdater from "electron-updater";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,6 +10,9 @@ import { startServer } from "../server.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+const { version: packageVersion = "0.0.0", displayVersion } = require("../package.json");
+const appDisplayVersion = displayVersion || packageVersion;
 const execFileAsync = promisify(execFile);
 
 let mainWindow;
@@ -23,6 +27,8 @@ let updateStatusLabel = "检查更新";
 let updateReadyInfo = null;
 let updateInstallFallbackTimer = null;
 let macSignatureStatusPromise = null;
+let mainCursorTimer = null;
+let petEnabled = false;
 let petQuietMode = false;
 let petAnchor = null;
 let petSettingsPath = "";
@@ -79,42 +85,44 @@ function createWindow(url) {
   const isWindows = process.platform === "win32";
   const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const workArea = cursorDisplay.workArea;
-  const width = Math.min(1280, workArea.width - 40);
-  const height = Math.min(860, workArea.height - 40);
+  const width = Math.min(880, workArea.width - 40);
+  const height = Math.min(680, workArea.height - 40);
 
   mainWindow = new BrowserWindow({
     width,
     height,
     x: Math.round(workArea.x + (workArea.width - width) / 2),
     y: Math.round(workArea.y + (workArea.height - height) / 2),
-    minWidth: 980,
-    minHeight: 680,
+    minWidth: 720,
+    minHeight: 540,
     title: desktopTestMode ? "neo 测试版" : "neo",
     icon: appIconPath,
-    backgroundColor: isMac ? "#00000000" : "#f7f4ee",
-    transparent: isMac,
+    backgroundColor: isMac || isWindows ? "#00000000" : "#f7f4ee",
+    transparent: isMac || isWindows,
+    hasShadow: !(isMac || isWindows),
+    roundedCorners: false,
     ...(isMac ? {
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: { x: 14, y: 18 },
-      vibrancy: "under-window",
-      visualEffectState: "active"
+      trafficLightPosition: { x: 48, y: 42 }
     } : {}),
     ...(isWindows ? {
+      frame: false,
       backgroundMaterial: "none"
     } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: false,
+      preload: path.join(__dirname, "preload.cjs")
     }
   });
 
-  if (isMac) {
+  if (isMac || isWindows) {
     mainWindow.setBackgroundColor("#00000000");
-    mainWindow.setVibrancy("under-window");
   }
 
   mainWindow.loadURL(url);
+  startMainCursorTracking();
 
   mainWindow.on("close", (event) => {
     if (isQuitting) return;
@@ -123,10 +131,51 @@ function createWindow(url) {
     if (process.platform === "darwin") app.dock?.hide();
   });
 
+  mainWindow.on("closed", () => {
+    stopMainCursorTracking();
+    mainWindow = null;
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
     shell.openExternal(targetUrl);
     return { action: "deny" };
   });
+}
+
+ipcMain.on("neo:window-control", (event, action) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  if (action === "minimize") {
+    win.minimize();
+  } else if (action === "maximize") {
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  } else if (action === "close") {
+    win.close();
+  }
+});
+
+function startMainCursorTracking() {
+  if (mainCursorTimer) return;
+  mainCursorTimer = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const bounds = mainWindow.getBounds();
+    mainWindow.webContents.send("neo:global-cursor", {
+      clientX: cursor.x - bounds.x,
+      clientY: cursor.y - bounds.y,
+      windowWidth: bounds.width,
+      windowHeight: bounds.height,
+      screenX: cursor.x,
+      screenY: cursor.y
+    });
+  }, 16);
+}
+
+function stopMainCursorTracking() {
+  if (!mainCursorTimer) return;
+  clearInterval(mainCursorTimer);
+  mainCursorTimer = null;
 }
 
 function showMainWindow() {
@@ -166,16 +215,7 @@ function updateTrayMenu() {
     },
     {
       label: petVisible ? "隐藏桌宠" : "显示桌宠",
-      click: () => {
-        if (!petWindow || petWindow.isDestroyed()) {
-          createPetWindow();
-          updateTrayMenu();
-          return;
-        }
-        if (petWindow.isVisible()) petWindow.hide();
-        else petWindow.show();
-        updateTrayMenu();
-      }
+      click: () => setPetEnabled(!petVisible)
     },
     {
       label: desktopTestMode ? "测试模式不检查更新" : updateStatusLabel,
@@ -279,6 +319,7 @@ async function loadPetSettings() {
   petSettingsPath = path.join(app.getPath("userData"), "pet-settings.json");
   try {
     const settings = JSON.parse(await readFile(petSettingsPath, "utf8"));
+    petEnabled = settings.enabled === true;
     petQuietMode = Boolean(settings.quietMode);
     if (Number.isFinite(settings.anchor?.x) && Number.isFinite(settings.anchor?.y)) {
       petAnchor = { x: settings.anchor.x, y: settings.anchor.y };
@@ -292,6 +333,7 @@ async function loadPetSettings() {
       petLayoutState.chatH = petChatSize.height;
     }
   } catch {
+    petEnabled = false;
     petQuietMode = false;
     petAnchor = null;
     petChatSize = { width: 350, height: 450 };
@@ -302,6 +344,7 @@ async function savePetSettings() {
   if (!petSettingsPath) return;
   try {
     await writeFile(petSettingsPath, JSON.stringify({
+      enabled: petEnabled,
       quietMode: petQuietMode,
       anchor: petAnchor,
       chatSize: petChatSize
@@ -331,7 +374,7 @@ function getUpdateState() {
   return {
     ...updateState,
     supported: app.isPackaged,
-    currentVersion: app.getVersion(),
+    currentVersion: appDisplayVersion,
     checking: updateCheckInFlight || updateState.checking
   };
 }
@@ -725,7 +768,7 @@ function configureAutoUpdates() {
       status: "not-available",
       checking: false,
       readyToInstall: false,
-      version: app.getVersion(),
+      version: appDisplayVersion,
       progress: 100,
       detail: "当前版本已经是最新"
     });
@@ -872,6 +915,59 @@ async function renderImageFile({ html, sourcePath, outputPath, width, height, fo
   }
 }
 
+// 把 HTML 渲染成 PDF 文件（用隐藏窗口 + printToPDF，输出高质量排版，无需额外依赖）。
+async function renderPdfFile({ html, outputPath }) {
+  const renderWindow = new BrowserWindow({
+    width: 794, // A4 @96dpi
+    height: 1123,
+    show: false,
+    frame: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: false }
+  });
+  try {
+    await renderWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html || "")}`);
+    await renderWindow.webContents.executeJavaScript(`
+      Promise.all([
+        document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve(),
+        new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      ]).then(() => true)
+    `);
+    const pdf = await renderWindow.webContents.printToPDF({ printBackground: true, pageSize: "A4" });
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, pdf);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  } finally {
+    if (!renderWindow.isDestroyed()) renderWindow.destroy();
+  }
+}
+
+// 截取当前（光标所在）显示器画面，返回 PNG dataUrl，供模型“看屏幕”使用。
+// macOS 需要“屏幕录制”权限，未授权时画面为空，会返回带引导的错误。
+async function captureScreen({ maxWidth } = {}) {
+  try {
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const scale = display.scaleFactor || 1;
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width: Math.round(display.size.width * scale), height: Math.round(display.size.height * scale) }
+    });
+    const source = sources.find((s) => String(s.display_id) === String(display.id)) || sources[0];
+    if (!source || !source.thumbnail || source.thumbnail.isEmpty()) {
+      return { ok: false, error: "未获取到屏幕画面：请在「系统设置 → 隐私与安全性 → 屏幕录制」中允许 neo，然后重试。", needsPermission: process.platform === "darwin" };
+    }
+    let image = source.thumbnail;
+    const targetW = Math.min(Number(maxWidth) || 1280, image.getSize().width);
+    if (targetW > 0 && targetW < image.getSize().width) image = image.resize({ width: targetW });
+    const size = image.getSize();
+    return { ok: true, dataUrl: `data:image/png;base64,${image.toPNG().toString("base64")}`, width: size.width, height: size.height };
+  } catch (error) {
+    return { ok: false, error: error.message || "截屏失败" };
+  }
+}
+
 async function boot() {
   if (desktopTestMode) {
     await mkdir(path.join(desktopTestRoot, "workspace"), { recursive: true });
@@ -899,6 +995,8 @@ async function boot() {
       if (Notification.isSupported()) new Notification({ title, body }).show();
     },
     renderImageFile,
+    renderPdfFile,
+    captureScreen,
     checkDesktopUpdates: async (manual) => desktopTestMode
       ? { ok: false, supported: false, status: "test-mode", message: "桌面测试模式不检查更新" }
       : checkForUpdates(manual, { background: true, interactive: false }),
@@ -942,8 +1040,20 @@ async function boot() {
   } else {
     configureAutoUpdates();
   }
-  createPetWindow();
+  if (petEnabled) createPetWindow();
   setupPetIpc();
+}
+
+function setPetEnabled(enabled) {
+  petEnabled = Boolean(enabled);
+  queueSavePetSettings();
+  if (petEnabled) {
+    createPetWindow();
+    if (petWindow && !petWindow.isDestroyed() && !petWindow.isVisible()) petWindow.show();
+  } else if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.hide();
+  }
+  updateTrayMenu();
 }
 
 // ── 桌宠窗口 ──────────────────────────────────────────────────────
@@ -1243,6 +1353,12 @@ function createPetWindow() {
 }
 
 function setupPetIpc() {
+  // 主窗口设置页的桌宠总开关
+  try { ipcMain.removeHandler("neo:pet-get-enabled"); } catch {}
+  ipcMain.handle("neo:pet-get-enabled", () => petEnabled);
+  ipcMain.removeAllListeners("neo:pet-set-enabled");
+  ipcMain.on("neo:pet-set-enabled", (_, enabled) => setPetEnabled(enabled));
+
   // 提供服务器 URL 给桌宠（同步 IPC）
   ipcMain.removeAllListeners("pet:get-server-url");
   ipcMain.on("pet:get-server-url", (event) => {

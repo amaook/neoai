@@ -100,7 +100,7 @@ async function makePptSamples() {
   await expectOk("create ppt cover", handleToolCall("create_ppt_file", {
     path: "samples/ppt/cover.pptx",
     title: "封面样例",
-    subtitle: "neo 0.9.5"
+    subtitle: "neo 0.9.9"
   }, writeConsent()));
   await expectOk("create ppt report", handleToolCall("create_ppt_file", {
     path: "samples/ppt/report.pptx",

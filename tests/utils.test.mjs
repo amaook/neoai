@@ -57,7 +57,9 @@ function safeJson(value) { return JSON.stringify(value, null, 2); }
 function parseArguments(value) {
   if (!value) return {};
   if (typeof value === "object") return value;
-  try { return JSON.parse(value); } catch { return {}; }
+  try { return JSON.parse(value); } catch {
+    return { __parseError: true, __raw: String(value).slice(0, 2000) };
+  }
 }
 
 function endpointFromBase(baseUrl, suffix) {
@@ -166,8 +168,9 @@ describe("parseArguments", () => {
     expect(parseArguments(null)).toEqual({});
     expect(parseArguments("")).toEqual({});
   });
-  it("不正な JSON は空オブジェクト", () => {
-    expect(parseArguments("not json")).toEqual({});
+  it("不正な JSON はパースエラー標記を返す", () => {
+    expect(parseArguments("not json")).toMatchObject({ __parseError: true, __raw: "not json" });
+    expect(parseArguments('{"path":"a.md","content":"trunc')).toMatchObject({ __parseError: true });
   });
 });
 

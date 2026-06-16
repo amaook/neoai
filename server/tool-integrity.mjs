@@ -2,7 +2,8 @@
 import { stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 
-import { resolveWorkspacePath, verifyOfficeFilePath } from "./tools.mjs";
+import { isArgumentParseError, resolveWorkspacePath, verifyOfficeFilePath } from "./tools.mjs";
+import { appendOperationLog, auditArgsSummary } from "./operation-log.mjs";
 
 const fileProducingTools = new Set([
   "write_file",
@@ -22,6 +23,16 @@ const commandCompletionRe = /(已|已经|成功|完成|我已|我已经).{0,12}(
 
 function isoNow() {
   return new Date().toISOString();
+}
+
+// 工具结果成功判定。约定：失败一律是 { ok:false } 或带 error 字段；
+// 少数工具（如 list_files）直接返回裸数组（结果数据本身），也算成功。
+export function toolResultOk(result) {
+  if (result == null) return false;
+  if (Array.isArray(result)) return true;
+  if (typeof result !== "object") return true;
+  if ("ok" in result) return Boolean(result.ok);
+  return !result.error;
 }
 
 function durationMs(startedAt, endedAt) {
@@ -109,17 +120,18 @@ export async function stepFromToolResult({ name, args, result, startedAt = isoNo
   const verification = await verifyToolResult(name, result);
   const finalResult = mergeVerificationIntoResult(result, verification);
   const endedAt = isoNow();
+  const ok = toolResultOk(finalResult);
   const receipt = {
     id: randomUUID(),
     tool: name || "未知工具",
-    status: finalResult?.ok ? "succeeded" : "failed",
-    ok: Boolean(finalResult?.ok),
+    status: ok ? "succeeded" : "failed",
+    ok,
     startedAt,
     endedAt,
     durationMs: durationMs(startedAt, endedAt),
     verified: verification.required ? verification.ok : undefined,
     verification: verification.required ? verification : undefined,
-    error: finalResult?.ok ? "" : String(finalResult?.error || "工具执行失败")
+    error: ok ? "" : String(finalResult?.error || "工具执行失败")
   };
   return {
     name,
@@ -133,19 +145,57 @@ export async function stepFromToolResult({ name, args, result, startedAt = isoNo
   };
 }
 
-export async function runToolWithReceipt({ name, args, toolConsent, availableToolNames, runner }) {
+export async function runToolWithReceipt({ name, args, toolConsent, availableToolNames, runner, confirmCommand }) {
   const startedAt = isoNow();
   let result;
   try {
-    if (availableToolNames && !availableToolNames.has(name)) {
+    if (isArgumentParseError(args)) {
+      result = {
+        ok: false,
+        error: `${name || "未知工具"} 的参数 JSON 解析失败，可能是模型输出被 max_tokens 截断`,
+        toolArgError: true,
+        argParseError: true
+      };
+    } else if (availableToolNames && !availableToolNames.has(name)) {
       result = { ok: false, error: `工具未启用：${name || "未知工具"}` };
+    } else if (name === "run_command" || name === "run_automation_script") {
+      // 即使权限已开启，每条命令/脚本仍需用户单次确认；无确认通道的调用路径一律拒绝
+      const isAutomation = name === "run_automation_script";
+      if (typeof confirmCommand !== "function") {
+        result = { ok: false, error: "当前调用路径不支持执行确认，已拒绝；请在主界面对话中执行需要确认的任务" };
+      } else {
+        const commandText = isAutomation ? String(args?.script || "") : String(args?.command || "");
+        const meta = isAutomation
+          ? { kind: "automation", language: String(args?.language || ""), purpose: String(args?.purpose || "") }
+          : null;
+        const decision = await confirmCommand(commandText, meta);
+        if (decision?.approved) {
+          result = await runner(name, args, toolConsent);
+        } else if (decision?.reason === "timeout") {
+          result = { ok: false, error: "用户在 60 秒内未确认，已自动拒绝；请换其他方式完成任务，或提醒用户在确认条上操作" };
+        } else {
+          result = { ok: false, error: "用户拒绝了本次执行；请换其他方式完成任务，或向用户说明为什么需要它" };
+        }
+      }
     } else {
       result = await runner(name, args, toolConsent);
     }
   } catch (error) {
     result = { ok: false, error: error.message };
   }
-  return stepFromToolResult({ name, args, result, startedAt });
+  const step = await stepFromToolResult({ name, args, result, startedAt });
+  // 审计日志：记录每一次工具调用（含被拒绝/未授权的尝试），只记元数据不记正文
+  await appendOperationLog({
+    ts: step.receipt.endedAt,
+    tool: name || "未知工具",
+    ok: step.receipt.ok,
+    status: step.receipt.status,
+    durationMs: step.receipt.durationMs,
+    error: step.receipt.ok ? "" : String(step.result?.error || "").slice(0, 200),
+    args: auditArgsSummary(name, args),
+    paths: resultPathsForTool(name, step.result)
+  });
+  return step;
 }
 
 export function isToolArgumentFailureStep(step = {}) {
@@ -157,11 +207,13 @@ export function repeatedToolArgumentFailure(steps = [], threshold = 2) {
   if (!isToolArgumentFailureStep(last)) return null;
   const toolName = last.name || "未知工具";
   let count = 0;
+  let parseError = false;
   const missing = new Set();
   for (let index = steps.length - 1; index >= 0; index -= 1) {
     const step = steps[index];
     if (step?.name !== toolName || !isToolArgumentFailureStep(step)) break;
     count += 1;
+    if (step.result.argParseError) parseError = true;
     for (const arg of step.result.missingArgs || []) missing.add(arg);
   }
   if (count < threshold) return null;
@@ -169,17 +221,33 @@ export function repeatedToolArgumentFailure(steps = [], threshold = 2) {
     toolName,
     count,
     missingArgs: [...missing],
-    lastError: last.result.error || "模型没有传入必要工具参数"
+    parseError,
+    lastError: last.result.error || (parseError ? "工具参数 JSON 解析失败" : "模型没有传入必要工具参数")
   };
 }
 
 export function toolArgumentFuseContent(fuse) {
+  if (fuse?.parseError) {
+    return [
+      `模型连续 ${fuse?.count || 2} 次调用 ${fuse?.toolName || "工具"} 时参数 JSON 解析失败，neo 已停止本轮工具循环。`,
+      "参数 JSON 不完整通常说明模型输出被 max_tokens 截断，并不是模型漏传参数。",
+      "请调大 maxTokens 后重新发送任务；如果仍然失败，请换用更稳定的模型。"
+    ].join("\n");
+  }
   const missing = fuse?.missingArgs?.length ? `缺少参数：${fuse.missingArgs.join("、")}。` : "";
   return [
     `模型连续 ${fuse?.count || 2} 次调用 ${fuse?.toolName || "工具"} 时没有传入必要工具参数，neo 已停止本轮工具循环。`,
     missing || fuse?.lastError || "",
     "这次任务未完成，避免继续消耗工具轮次。请重新发送任务，或换用更稳定的模型后继续。"
   ].filter(Boolean).join("\n");
+}
+
+export function maxTokensTruncationContent(toolNames = []) {
+  const tools = toolNames.length ? `（涉及工具：${toolNames.join("、")}）` : "";
+  return [
+    `模型输出被 max_tokens 截断，工具调用参数不完整${tools}，neo 没有执行这次不完整的工具调用。`,
+    "请调大 maxTokens 后重试；如果任务较复杂，也可以拆分成更小的步骤。"
+  ].join("\n");
 }
 
 function hasSuccessfulReceipt(steps = []) {

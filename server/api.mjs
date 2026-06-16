@@ -5,6 +5,7 @@ import { agentTools, skillToolMap, toolsForSkillIds, handleToolCall, parseArgume
 import { blockPseudoToolOutput } from "./pseudo-tools.mjs";
 import {
   blockUnverifiedCompletion,
+  maxTokensTruncationContent,
   repeatedToolArgumentFailure,
   runToolWithReceipt,
   toolArgumentFuseContent
@@ -90,6 +91,8 @@ export function toAnthropicContent(content) {
       if (match) return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } };
     }
     if (part.type === "image") return part;
+    // tool_use / tool_result 是 Anthropic 原生块，多轮工具调用时需原样保留，不能转成文本
+    if (part.type === "tool_use" || part.type === "tool_result") return part;
     return { type: "text", text: JSON.stringify(part) };
   });
 }
@@ -130,6 +133,37 @@ export function normalizeMessages(messages) {
     : [];
 }
 
+function messageCharLength(message = {}) {
+  const content = message.content;
+  if (typeof content === "string") return content.length;
+  try { return JSON.stringify(content ?? "").length; } catch { return 0; }
+}
+
+// 服务端最后一道保险：历史字符量超过预算时，保留全部 system 消息 + 最近若干轮，
+// 丢弃中间较早的消息，避免超长对话（前端压缩失败或定时/子智能体路径）直接打到上游报错。
+export function capMessageHistory(messages, maxChars = ctx.maxHistoryChars) {
+  if (!Array.isArray(messages) || !maxChars || maxChars <= 0) return messages;
+  const total = messages.reduce((sum, m) => sum + messageCharLength(m), 0);
+  if (total <= maxChars) return messages;
+
+  const system = messages.filter((m) => m.role === "system");
+  const rest = messages.filter((m) => m.role !== "system");
+  let budget = maxChars - system.reduce((sum, m) => sum + messageCharLength(m), 0);
+
+  const kept = [];
+  for (let i = rest.length - 1; i >= 0; i--) {
+    const len = messageCharLength(rest[i]);
+    if (kept.length && budget - len < 0) break; // 至少保留最近一条
+    budget -= len;
+    kept.unshift(rest[i]);
+  }
+
+  const dropped = rest.length - kept.length;
+  if (dropped <= 0) return messages;
+  const notice = { role: "system", content: `[系统提示] 为避免超出模型上下文，已省略较早的 ${dropped} 条历史消息，仅保留最近对话。如需更早内容请重新提供。` };
+  return [...system, notice, ...kept];
+}
+
 function openAICompatibleSupportsImageInput(provider = {}, model = "") {
   const normalizedModel = String(model || "").trim().toLowerCase();
   const providerText = [provider.id, provider.name, provider.baseUrl, model].filter(Boolean).join(" ").toLowerCase();
@@ -139,21 +173,19 @@ function openAICompatibleSupportsImageInput(provider = {}, model = "") {
   if (providerText.includes("api.openai.com")) return /gpt-4o|gpt-4\.1|gpt-5|o3|o4/.test(String(model).toLowerCase());
   if (providerText.includes("dashscope") || providerText.includes("qwen") || providerText.includes("百炼")) {
     if (/^qwen3-coder|^qwen-coder|coder/.test(normalizedModel)) return false;
-    if (/^qwen3\.(6|5)-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen3-vl-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen-vl|^qvq|omni/.test(normalizedModel)) return true;
   }
   if (providerText.includes("moonshot") || providerText.includes("kimi")) {
-    if (/^kimi-k2\.(6|5)(-|$)/.test(normalizedModel)) return true;
     if (/^moonshot-v1-(8k|32k|128k)-vision-preview$/.test(normalizedModel)) return true;
   }
   if (providerText.includes("api.x.ai") || providerText.includes("xai") || providerText.includes("grok")) {
-    return /^grok-(4\.3|build-0\.1)(-|$)/.test(normalizedModel);
+    return /vision|image|vl|omni/.test(normalizedModel);
   }
   if (providerText.includes("mistral")) {
-    return /^mistral-(medium-3-5|large-2512|small-2603)(-|$)/.test(normalizedModel);
+    return /vision|pixtral|vl|omni/.test(normalizedModel);
   }
-  return /vision|vl|omni|multimodal|llava/.test(providerText);
+  return /vision|vl|omni|multimodal|llava|pixtral/.test(providerText);
 }
 
 export function providerSupportsImageInput(provider = {}, model = "") {
@@ -161,6 +193,54 @@ export function providerSupportsImageInput(provider = {}, model = "") {
   if (protocol === "anthropic" || protocol === "gemini") return true;
   if (protocol === "openai") return openAICompatibleSupportsImageInput(provider, model);
   return false;
+}
+
+// ── 屏幕截图注入（看屏幕）─────────────────────────────────────────────────────
+// screen_capture 的结果里带 dataUrl（大），不能作为文本进历史，需单独转成图片内容块喂给视觉模型。
+
+const IMAGE_INJECT_TOOLS = new Set(["screen_capture", "read_image_file"]);
+export function extractScreenshotFromResult(name, result) {
+  if (IMAGE_INJECT_TOOLS.has(name) && result && result.ok && typeof result.dataUrl === "string") {
+    const { dataUrl, ...rest } = result;
+    return { resultForModel: { ...rest, imageInjected: true }, screenshotDataUrl: dataUrl, screenshotPath: result.path || "" };
+  }
+  return { resultForModel: result, screenshotDataUrl: null, screenshotPath: "" };
+}
+
+// 移除历史里已注入的旧截图，避免每轮重复发送大图
+export function dropInjectedScreenshots(loopMessages = []) {
+  for (let i = loopMessages.length - 1; i >= 0; i -= 1) {
+    if (loopMessages[i] && loopMessages[i]._screenshot) loopMessages.splice(i, 1);
+  }
+}
+
+const SCREENSHOT_HINT = "[图片内容（屏幕截图或本地图片），供你查看以读取其中文字、定位元素或理解内容；这是只读画面，不要声称已经点击或操作了软件]";
+
+function screenshotUnavailableText(path) {
+  return `（屏幕截图已保存到 ${path || "工作区 Screenshots"}，但当前模型不支持识别图片，请切换到支持图片输入的模型后再看屏幕。）`;
+}
+
+// OpenAI 兼容 / Gemini：作为独立 user 消息（image_url 内容块）
+export function screenshotUserMessage(dataUrl, path, provider, model) {
+  if (providerSupportsImageInput(provider, model)) {
+    return { role: "user", _screenshot: true, content: [
+      { type: "text", text: SCREENSHOT_HINT },
+      { type: "image_url", image_url: { url: dataUrl } }
+    ] };
+  }
+  return { role: "user", _screenshot: true, content: screenshotUnavailableText(path) };
+}
+
+// Anthropic：作为 image 块并入同一条 tool_result user 消息，避免出现连续 user 消息
+export function anthropicScreenshotBlocks(dataUrl, path, provider, model) {
+  const match = String(dataUrl || "").match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
+  if (providerSupportsImageInput(provider, model) && match) {
+    return [
+      { type: "text", text: SCREENSHOT_HINT },
+      { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } }
+    ];
+  }
+  return [{ type: "text", text: screenshotUnavailableText(path) }];
 }
 
 export function stripImagePartsForTextOnly(messages = []) {
@@ -185,10 +265,32 @@ function isOpenAIHostedModel(provider = {}, model = "") {
   return providerText.includes("api.openai.com") && /^gpt-5|^o[134]/.test(String(model || "").trim().toLowerCase());
 }
 
-export function openAICompatibleChatBody({ provider, model, messages, temperature, maxTokens, stream }) {
+function isKimiFixedParameterModel(provider = {}, model = "") {
+  const providerText = [provider.id, provider.name, provider.baseUrl].filter(Boolean).join(" ").toLowerCase();
+  const modelId = String(model || "").trim().toLowerCase();
+  return (providerText.includes("moonshot") || providerText.includes("kimi"))
+    && /^kimi-k2\.(5|6)(?:$|[-_])/.test(modelId);
+}
+
+function isDeepSeekV4Model(provider = {}, model = "") {
+  const providerText = [provider.id, provider.name, provider.baseUrl].filter(Boolean).join(" ").toLowerCase();
+  const modelId = String(model || "").trim().toLowerCase();
+  return (providerText.includes("deepseek") || providerText.includes("api.deepseek.com"))
+    && /^deepseek-v4-(flash|pro)(?:$|[-_])/.test(modelId);
+}
+
+function deepSeekThinkingOptions(thinking = "") {
+  if (String(thinking || "").toLowerCase() === "deep") {
+    return { thinking: { type: "enabled" }, reasoning_effort: "max" };
+  }
+  return { thinking: { type: "disabled" } };
+}
+
+export function openAICompatibleChatBody({ provider, model, messages, temperature, maxTokens, stream, thinking }) {
   const body = { model, messages, stream };
   const openAIHosted = isOpenAIHostedModel(provider, model);
-  if (!openAIHosted && Number.isFinite(Number(temperature))) body.temperature = Number(temperature);
+  if (!openAIHosted && !isKimiFixedParameterModel(provider, model) && Number.isFinite(Number(temperature))) body.temperature = Number(temperature);
+  if (isDeepSeekV4Model(provider, model)) Object.assign(body, deepSeekThinkingOptions(thinking));
   if (maxTokens) {
     if (openAIHosted) body.max_completion_tokens = maxTokens;
     else body.max_tokens = maxTokens;
@@ -198,13 +300,13 @@ export function openAICompatibleChatBody({ provider, model, messages, temperatur
 
 // ── 非流式 API ───────────────────────────────────────────────────────────────
 
-export async function callOpenAICompatible({ provider, model, messages, temperature, maxTokens, enableTools, enabledSkills, toolConsent, signal, onStep, allowSkillDelegation = true }) {
+export async function callOpenAICompatible({ provider, model, messages, temperature, maxTokens, thinking, enableTools, enabledSkills, toolConsent, signal, onStep, confirmCommand, allowSkillDelegation = true }) {
   requireKey(provider);
   const endpoint = endpointFromBase(provider.baseUrl, "/chat/completions");
   if (!endpoint) { const e = new Error("请填写 Base URL"); e.status = 400; throw e; }
 
   const headers = { Authorization: `Bearer ${provider.apiKey}` };
-  const baseBody = openAICompatibleChatBody({ provider, model, messages, temperature, maxTokens, stream: false });
+  const baseBody = openAICompatibleChatBody({ provider, model, messages, temperature, maxTokens, stream: false, thinking });
 
   const availableTools = enableTools ? toolsForSkillIds(enabledSkills, toolConsent, { includeInvokeSkill: allowSkillDelegation }) : [];
   if (!enableTools || !availableTools.length) {
@@ -229,6 +331,11 @@ export async function callOpenAICompatible({ provider, model, messages, temperat
     const choice = data?.choices?.[0] || {};
     const message = choice.message || {};
     const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    // 输出在工具调用参数生成中途被 max_tokens 截断，参数不完整，不能执行
+    if (calls.length && choice.finish_reason === "length") {
+      const toolNames = calls.map((call) => call?.function?.name).filter(Boolean);
+      return { content: maxTokensTruncationContent(toolNames), usage: data?.usage || null, raw: data, steps, maxTokensTruncated: true };
+    }
     if (!calls.length) {
       const content = messageTextContent(message);
       const blocked = blockPseudoToolOutput(content, { enableTools });
@@ -239,6 +346,7 @@ export async function callOpenAICompatible({ provider, model, messages, temperat
     }
     loopMessages.push(message);
     const roundSteps = [];
+    let roundShot = null;
     for (const call of calls) {
       const name = call?.function?.name;
       const args = parseArguments(call?.function?.arguments);
@@ -248,18 +356,22 @@ export async function callOpenAICompatible({ provider, model, messages, temperat
         args,
         toolConsent,
         availableToolNames,
-        runner: handleToolCall
+        runner: handleToolCall,
+        confirmCommand
       });
-      onStep?.({ phase: "end", name, args, result: step.result, receipt: step.receipt });
+      const shot = extractScreenshotFromResult(name, step.result);
+      onStep?.({ phase: "end", name, args, result: shot.resultForModel, receipt: step.receipt });
       steps.push(step);
       roundSteps.push(step);
-      loopMessages.push({ role: "tool", tool_call_id: call.id, name, content: safeJson(step.result) });
+      loopMessages.push({ role: "tool", tool_call_id: call.id, name, content: safeJson(shot.resultForModel) });
+      if (shot.screenshotDataUrl) roundShot = { dataUrl: shot.screenshotDataUrl, path: shot.screenshotPath };
       const fuse = repeatedToolArgumentFailure(steps);
       if (fuse) {
         return { content: toolArgumentFuseContent(fuse), usage: null, raw: data, steps, toolArgFuse: fuse };
       }
     }
     appendRecoveryUserMessage(loopMessages, roundSteps, availableTools);
+    if (roundShot) { dropInjectedScreenshots(loopMessages); loopMessages.push(screenshotUserMessage(roundShot.dataUrl, roundShot.path, provider, model)); }
   }
 
   const limitPrompt = [`[系统提示] 已达到工具调用上限（${maxToolRounds} 轮），无法继续调用工具。`, "请根据上面已执行的工具结果，向用户如实汇报：", "1. 已完成的步骤和结果（包括文件路径）", "2. 尚未完成的步骤（如有），并说明原因是达到了调用轮次上限", "3. 建议用户如何继续（例如：再次发送任务以继续剩余步骤）", "不要说任务已全部完成，除非所有步骤都成功执行。"].join("\n");
@@ -274,8 +386,8 @@ export async function callOpenAICompatible({ provider, model, messages, temperat
     }
   } catch {}
 
-  const succeeded = steps.filter((s) => s?.result?.ok);
-  const failed = steps.filter((s) => s?.result && !s.result.ok);
+  const succeeded = steps.filter((s) => s?.receipt?.ok);
+  const failed = steps.filter((s) => s?.receipt && !s.receipt.ok);
   const savedPath = [...succeeded].reverse().find((s) => s.result.path)?.result.path;
   return { content: [`已达到工具调用上限（${maxToolRounds} 轮），任务未必全部完成。`, succeeded.length ? `成功执行 ${succeeded.length} 个工具步骤。` : "", failed.length ? `${failed.length} 个步骤失败。` : "", savedPath ? `最近保存的文件：${savedPath}` : "", "如需继续，请重新发送任务指令。"].filter(Boolean).join("\n"), usage: null, raw: null, steps, hitToolLimit: true };
 }

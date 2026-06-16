@@ -79,7 +79,7 @@ describe("office runtime", () => {
     const result = await handleToolCall("create_ppt_file", {
       path: "outputs/deck.pptx",
       title: "月度复盘",
-      subtitle: "0.9.5 办公内核",
+      subtitle: "0.9.9 办公内核",
       sections: [
         { title: "收入", bullets: ["平台收入增长", "异常店铺需复核"] },
         { title: "行动", bullets: ["清洗表格", "导出报告"] }
@@ -89,6 +89,39 @@ describe("office runtime", () => {
     expect(result).toMatchObject({ ok: true, verified: true, path: "outputs/deck.pptx" });
     expect(result.verification.details.slideCount).toBeGreaterThanOrEqual(4);
     expect(result.verification.details.text).toContain("月度复盘");
+  });
+
+  it("escapes XML-special characters when generating docx/pptx/xlsx (1.1.11)", async () => {
+    const tricky = 'A&B <tag> "q" 你好';
+
+    const docx = await handleToolCall("create_word_file", {
+      path: "outputs/special.docx",
+      title: tricky,
+      paragraphs: [`正文：${tricky}`]
+    }, { fileWrite: true, fileRead: true });
+    // 转义出错会生成非法 XML，导致回读校验失败，因此 verified:true 即为护栏
+    expect(docx).toMatchObject({ ok: true, verified: true });
+    expect(docx.verification.details.text).toContain("你好");
+
+    const pptx = await handleToolCall("create_ppt_file", {
+      path: "outputs/special.pptx",
+      title: tricky,
+      sections: [{ title: tricky, bullets: [tricky] }]
+    }, { fileWrite: true, fileRead: true });
+    expect(pptx).toMatchObject({ ok: true, verified: true });
+    expect(pptx.verification.details.text).toContain("你好");
+
+    const xlsx = await createExcelWorkbook({
+      path: "outputs/special.xlsx",
+      sheet_name: "S",
+      columns: ["备注"],
+      rows: [{ 备注: tricky }]
+    });
+    expect(xlsx).toMatchObject({ ok: true, verified: true });
+    const readback = await readExcelWorkbook({ path: "outputs/special.xlsx", row_limit: 5 });
+    const cells = JSON.stringify(readback.sheets[0]);
+    expect(cells).toContain("A&B");
+    expect(cells).toContain("<tag>");
   });
 
   it("inspects supported office files and rejects legacy formats clearly", async () => {

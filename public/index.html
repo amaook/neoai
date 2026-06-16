@@ -12,23 +12,31 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   </head>
-  <body>
+  <body class="neo-lens-mode">
     <div class="ambient-glow" aria-hidden="true"></div>
     <canvas id="ambientMotionCanvas" class="ambient-motion" aria-hidden="true"></canvas>
-
-    <header class="window-titlebar" aria-label="neo 窗口栏">
+    <header class="window-titlebar" aria-label="窗口栏">
       <div class="titlebar-zone titlebar-left">
         <button id="sidebarToggleBtn" class="workspace-toggle titlebar-sidebar-toggle active" type="button" aria-pressed="true" title="收起左侧栏" aria-label="切换左侧栏">
           <img class="titlebar-toggle-icon" src="/assets/sidebar-toggle-left.png" alt="" aria-hidden="true" />
         </button>
       </div>
-      <div class="titlebar-zone titlebar-center">
-        <span class="titlebar-brand">neo</span>
-      </div>
+      <div class="titlebar-zone titlebar-center" aria-hidden="true"></div>
       <div class="titlebar-zone titlebar-right">
         <button id="workspaceToggleBtn" class="workspace-toggle titlebar-workspace-toggle active" type="button" aria-pressed="true" title="工作台" aria-label="切换工作台">
           <img class="titlebar-toggle-icon" src="/assets/workspace-toggle-right.png" alt="" aria-hidden="true" />
         </button>
+        <div class="win-window-controls" aria-label="窗口控制">
+          <button id="winMinimizeBtn" class="win-control-btn" type="button" title="最小化" aria-label="最小化">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5h10" /></svg>
+          </button>
+          <button id="winMaximizeBtn" class="win-control-btn" type="button" title="最大化" aria-label="最大化">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" rx="1.5" /></svg>
+          </button>
+          <button id="winCloseBtn" class="win-control-btn win-control-close" type="button" title="关闭" aria-label="关闭">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1l-8 8" /></svg>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -41,40 +49,7 @@
             </span>
             <strong>新对话</strong>
           </button>
-          <button id="scheduleEntryBtn" class="nav-item" type="button">
-            <span class="nav-logo nav-line-icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.4 1.8M9 3h6"/></svg>
-            </span>
-            <strong>定时任务</strong>
-          </button>
         </nav>
-
-        <!-- 定时任务面板（在左侧栏内展开） -->
-        <section id="scheduleSidePanel" class="schedule-side-panel" style="display:none">
-          <div class="schedule-side-header">
-            <span>neo 内置定时</span>
-            <button id="newScheduleBtn" class="ghost-button small" type="button">＋ 新建</button>
-          </div>
-          <div id="scheduleForm" class="schedule-form" style="display:none">
-            <input id="scheduleNameInput" placeholder="任务名称，如：每日新闻" maxlength="60" />
-            <textarea id="schedulePromptInput" rows="3" placeholder="任务描述，如：搜索今天最重要的 AI 新闻，总结 5 条要点"></textarea>
-            <input id="scheduleExprInput" placeholder="调度时间：daily 09:00 / hourly / interval 30m" />
-            <small id="scheduleExprHint" class="schedule-expr-hint"></small>
-            <select id="scheduleProviderSelect"></select>
-            <input id="scheduleModelInput" placeholder="模型名称，如：deepseek-v4-flash" />
-            <input id="scheduleOutputInput" placeholder="输出文件：schedules/{date}-{name}.md" />
-            <div class="schedule-form-check">
-              <label><input type="checkbox" id="scheduleToolsCheck" /> 启用本地工具</label>
-              <label><input type="checkbox" id="scheduleNotifyCheck" checked /> 完成时通知</label>
-            </div>
-            <div class="schedule-form-actions">
-              <button id="saveScheduleBtn" class="primary-button small" type="button">保存</button>
-              <button id="cancelScheduleBtn" class="ghost-button small" type="button">取消</button>
-              <small id="scheduleFormFeedback"></small>
-            </div>
-          </div>
-          <div id="scheduleList" class="schedule-list"></div>
-        </section>
 
         <section class="history-pane">
           <div class="history-header">
@@ -94,7 +69,7 @@
             </span>
             <strong>设置</strong>
           </button>
-          <span id="appVersionBadge" class="app-version">v0.9.7</span>
+          <span id="appVersionBadge" class="app-version">v1.8.0</span>
         </div>
       </aside>
 
@@ -102,17 +77,35 @@
 
       <main class="main">
         <section class="workspace-card">
+          <nav class="neo-capability-rail" aria-label="隐藏能力入口">
+            <button id="lensHistoryBtn" class="lens-action-button" type="button" title="历史对话" aria-label="打开历史对话">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.05-4.95"/><path d="M5 5v5h5"/><path d="M12 8v4l2.4 1.5"/></svg>
+            </button>
+            <button id="lensWorkspaceBtn" class="lens-action-button" type="button" title="工作台" aria-label="打开工作台">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 7 4v9.5l-7 4-7-4V7z"/><path d="m5 7 7 4 7-4"/><path d="M12 11v9.5"/></svg>
+            </button>
+            <button id="lensSettingsBtn" class="lens-action-button" type="button" title="设置" aria-label="打开设置">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+            </button>
+          </nav>
+          <div id="laserFlowPreview" class="laser-flow-stage" aria-hidden="true"></div>
+          <div class="neo-lens-presence" aria-hidden="true">
+            <span class="lens-ring lens-ring-one"></span>
+            <span class="lens-ring lens-ring-two"></span>
+            <span class="lens-ring lens-ring-three"></span>
+            <span class="lens-breath"></span>
+          </div>
           <div id="messageList" class="message-list"></div>
 
           <div class="hero" id="heroBlock">
-            <h1>我们该做什么？</h1>
-            <p>与 AI 协作，构建和实现你的想法</p>
+            <h1>neo 正在待命</h1>
+            <p>项目已准备 · 权限默认关闭</p>
           </div>
 
           <form id="chatForm" class="composer">
             <div id="attachmentBar" class="attachment-bar hidden"></div>
             <div id="quoteBar" class="quote-bar hidden"></div>
-            <textarea id="promptInput" rows="2" placeholder="输入你的问题或任务…" spellcheck="false"></textarea>
+            <textarea id="promptInput" rows="2" aria-label="输入消息" spellcheck="false"></textarea>
             <input type="file" id="fileInput" multiple hidden
               accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.go,.rs,.java,.c,.cpp,.h,.sh,.sql,.toml,.env,.pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.xlsm,image/*" />
             <div class="composer-toolbar">
@@ -126,7 +119,6 @@
                 <span id="activeModelName">neo-mock</span>⌄
               </button>
               <span class="toolbar-spacer"></span>
-              <span id="inlineSendStatus" class="inline-send-status">就绪</span>
               <button id="sendBtn" class="send-button" type="submit">↑</button>
             </div>
           </form>
@@ -149,6 +141,7 @@
           <button class="workspace-tab" type="button" data-panel-tab="artifacts" role="tab" aria-selected="false">成果</button>
           <button class="workspace-tab" type="button" data-panel-tab="files" role="tab" aria-selected="false">文件</button>
           <button class="workspace-tab" type="button" data-panel-tab="terminal" role="tab" aria-selected="false">终端</button>
+          <button class="workspace-tab" type="button" data-panel-tab="audit" role="tab" aria-selected="false">日志</button>
         </div>
 
         <section id="tasksPanel" class="workspace-panel-section active" data-panel-section="tasks">
@@ -163,6 +156,7 @@
             </div>
           </div>
           <div id="taskMetrics" class="task-metrics"></div>
+          <div id="taskPlanList" class="task-plan-list" hidden></div>
           <div id="taskEventList" class="task-event-list"></div>
           <div class="panel-mini-title">工具调用</div>
           <div id="toolSteps" class="tool-step-list"></div>
@@ -201,13 +195,17 @@
           <pre id="terminalOutput" class="terminal-output">等待命令</pre>
         </section>
 
-        <footer class="workspace-status-footer" aria-label="工作台状态">
-          <div class="workspace-status-main">
-            <span class="workspace-status-dot" aria-hidden="true"></span>
-            <strong>系统在线</strong>
+        <section id="auditPanel" class="workspace-panel-section" data-panel-section="audit">
+          <div class="audit-toolbar">
+            <strong>操作日志</strong>
+            <div class="audit-toolbar-actions">
+              <button id="refreshAuditBtn" class="ghost-button small" type="button">刷新</button>
+              <button id="clearAuditBtn" class="ghost-button small" type="button">清空</button>
+            </div>
           </div>
-          <span id="workspaceStatusVersion">neo-core v0.9.7</span>
-        </footer>
+          <p class="audit-hint">neo 本地记录每次工具调用的元数据（工具、状态、耗时、产出路径），只记元数据、绝不记录正文内容，永不外发。</p>
+          <div id="auditLogList" class="audit-log-list"></div>
+        </section>
 
       </aside>
     </div>
@@ -233,15 +231,6 @@
           </label>
         </div>
       </div>
-    </div>
-
-    <div id="sendStatusToast" class="status-toast hidden">
-      <span id="sendStatusIcon">✓</span>
-      <div>
-        <strong id="sendStatus">就绪</strong>
-        <small id="sendStatusDetail">等待输入</small>
-      </div>
-      <button id="dismissStatusBtn" type="button">×</button>
     </div>
 
     <div id="settingsBackdrop" class="sheet-backdrop hidden"></div>
@@ -304,7 +293,7 @@
             <img src="/assets/logo.png" alt="neo" />
           </div>
           <h3>关于</h3>
-          <strong>neo <span id="aboutVersionLabel">v0.9.7</span></strong>
+          <strong>neo <span id="aboutVersionLabel">v1.8.0</span></strong>
           <button id="checkUpdatesBtn" class="primary-button" type="button">检查更新</button>
           <span id="updateFeedback" class="sheet-feedback" aria-live="polite"></span>
           <section id="updateProgressPanel" class="update-progress-panel" aria-live="polite">
@@ -320,8 +309,162 @@
             </header>
             <article class="release-note current">
               <div>
+                <strong>neo 1.8.0</strong>
+                <time>当前版本 · 操作日志（护栏第一步）</time>
+              </div>
+              <ul>
+                <li>新增「操作日志」：工作台多了一个「日志」标签，把 neo 每次调用工具（读写文件、运行命令、联网、生成文档等）的痕迹列清楚——工具名、成功/失败、耗时、产出文件路径。</li>
+                <li>只记元数据、绝不记录正文内容（文件内容、网页正文、命令输出都不入库），全部留在本地、永不外发，随时可一键清空。</li>
+                <li>联网更安全：抓取网页时改为手动跟随跳转，每一跳的目标都重新做内网/本地地址校验，堵住"公网链接 302 跳到内网"的绕过。</li>
+                <li>这是「带护栏的自主代理」的第一步——先让每一步操作可被看见、可审计，后续再做任务级授权与全局急停。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.7.1</strong>
+                <time>透视 / 分组汇总</time>
+              </div>
+              <ul>
+                <li>新增「透视 / 分组汇总」（pivot_table）：按维度分组对数值列做求和 / 平均 / 计数 / 最大 / 最小，结果另存为新的 Excel（或 CSV）。</li>
+                <li>支持交叉透视表：设一个"透视列"，行 × 该列的不同取值生成矩阵（如"部门 × 月份"汇总金额）。</li>
+                <li>常见用法："按部门按月统计销售额""各地区订单数""按项目汇总成本"——不用手写公式或拖透视表。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.7.0</strong>
+                <time>数据表格智能（体检 + 出图）</time>
+              </div>
+              <ul>
+                <li>新增「数据质量体检」（check_table）：对 Excel / CSV 表格逐列体检——每列缺失率、主类型与类型一致性、完全重复行、数值异常值（IQR）、日期格式混用、单元格首尾空格、高频取值。</li>
+                <li>拿到一份脏表先体检再清洗：「表格处理」「财务表格」技能会先用它找出问题，再决定怎么修。</li>
+                <li>会直接给一份排好版的 Markdown 报告，可一键存成文档或 PDF。</li>
+                <li>新增「表格出图」（chart_from_table）：从 Excel / CSV 直接画折线 / 柱状 / 饼图，选标签列和数值列即可，默认输出带文字、可缩放的 SVG（也可出 PNG）。</li>
+                <li>纯本地完成、不依赖 Python、不联网、不需要额外模型。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.6.0</strong>
+                <time>问我的文件（本地知识库）</time>
+              </div>
+              <ul>
+                <li>新增「问我的文件」：跨整个工作区按关键词检索，能搜进 Excel / Word / PDF / PPT 的内容（不只纯文本），找到最相关的文件再读出来回答并给出处。</li>
+                <li>「本地文件助手」技能现在会先检索、再读取、带来源回答——不用你手动指明在哪个文件。</li>
+                <li>检索更准：命中文件名、标题/首段、完整短语都会加权，长文档不再靠堆词频霸榜；结果片段对命中词做【】高亮，必要时给两段。</li>
+                <li>记忆按工作区隔离：标记为"当前工作区"的记忆只在对应工作区里生效与注入，换项目不会串记忆；记忆列表会标出"其他工作区"的条目。</li>
+                <li>关键词检索，本地完成、无需联网、不依赖额外模型。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.5.0</strong>
+                <time>办公补缺（PDF / 模板 / OCR / md→Word）</time>
+              </div>
+              <ul>
+                <li>新增 PDF 导出：用 create_pdf_file 把 Markdown 或 HTML 渲染成真实 .pdf 文件并回读校验（如周报、说明文档一键出 PDF）。</li>
+                <li>「文档阅读」技能现可生成 Word / PPT / PDF 三种文档。</li>
+                <li>新增办公模板库（get_template）：周报 / 会议纪要 / 简历 / 项目计划 / 工作总结，取骨架填好直接出文档。</li>
+                <li>新增读图片 / OCR（read_image_file）：读工作区图片或扫描件交给视觉模型读字、看图（需支持图片的模型）。</li>
+                <li>create_word_file 支持直接传 Markdown 自动转 Word（标题/列表/表格都转），同一份 Markdown 可出 PDF 也可出 Word。</li>
+                <li>PDF 用桌面端排版引擎渲染，质量高、无需额外依赖；浏览器预览模式暂不支持。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.4.0</strong>
+                <time>看屏幕</time>
+              </div>
+              <ul>
+                <li>新增「看屏幕」技能：模型可截取当前屏幕画面来读取界面、定位元素、给操作指导（只读，不点击）。</li>
+                <li>独立的「截取屏幕画面」权限，默认关闭；屏幕画面会发送给所选模型供应商，授权时明确提示。</li>
+                <li>需桌面应用 + 支持图片输入的模型（如 Qwen-VL / GPT-4o 系 / Claude / Gemini）；截图自动作为图片喂给模型。</li>
+                <li>修复 Claude 多轮工具调用时工具结果被降级成文本的问题。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.3.0</strong>
+                <time>系统/软件设置脚本操控</time>
+              </div>
+              <ul>
+                <li>新增「系统与软件设置」技能：模型可按平台生成 AppleScript（mac）/ PowerShell（win）/ Shell 脚本来调整系统或软件设置。</li>
+                <li>独立的「运行系统/软件设置脚本」权限，默认关闭；每条脚本运行前都在确认条上显示人话目的，由你单独放行。</li>
+                <li>高危脚本（删盘、格式化、关机、fork 炸弹等）即使已授权也会被直接拦截，不进入执行。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.2.0</strong>
+                <time>信息搜集闭环</time>
+              </div>
+              <ul>
+                <li>新增「信息搜集」技能：围绕一个主题多轮检索、批量读取来源，整理成带「## 来源」引用的 Markdown 简报落地工作区 Research 目录。</li>
+                <li>新增 read_web_pages 批量读网页工具：一次并行读取多个来源正文，避免逐个读触达工具轮次上限。</li>
+                <li>网页正文提取升级：优先抓取 &lt;article&gt;/&lt;main&gt; 主内容，剥离导航 / 页脚 / 侧栏噪音，简报更干净、更省上下文。</li>
+                <li>搜索新增 site 限定站点与时效过滤参数（best-effort），中文 / 英文检索都能更精准。</li>
+                <li>新增 save_research_report 工具：把搜集结果写成统一结构的 Markdown 简报，自动生成去重、带取用日期的来源清单。</li>
+                <li>流式输出更顺滑：逐字平滑揭示 + 打字光标，不再一跳一跳；阅读历史时不会被强行拽到底部。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.1.0</strong>
+                <time>稳定性加固</time>
+              </div>
+              <ul>
+                <li>修复网页抓取与搜索的中文乱码：按 HTTP 头、BOM 和 &lt;meta&gt; 自动识别 GBK/GB2312/GB18030 等编码再解码。</li>
+                <li>搜索新增 Bing 国内站兜底，中文关键词优先走 Bing，英文仍优先 DuckDuckGo；并加入结果缓存与瞬时失败自动重试。</li>
+                <li>流式输出更稳：正文中途卡死会按空闲超时自动停止；上游限流 / 欠费 / 模型不存在等流内报错会如实提示，不再只给空回复。</li>
+                <li>抓取改用真实浏览器标识，降低被搜索引擎拦截返回空页的概率。</li>
+                <li>生成的 Excel / Word / PPT 加强校验：空表会判为失败，特殊字符（&amp;、&lt;、&gt;）转义有回归测试保障。</li>
+                <li>安全加固：网页读取 / 下载拒绝访问本地与内网地址（含云元数据），防止被诱导请求内网。</li>
+                <li>超长对话增加服务端兜底截断，保留 system 指令和最近对话，避免直接触发上游上下文超限报错。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 1.0.0</strong>
+                <time>首个正式版</time>
+              </div>
+              <ul>
+                <li>新增浅色主题：设置 → 外观一键切换，界面与电光边框、粒子等动效整体换色，浅色动效采用晨雾靛紫（紫 + 蓝）配色。</li>
+                <li>Windows 窗口与 mac 对齐：去掉系统标题栏和菜单栏，改为透明无边框悬浮窗口，右上角内置最小化 / 最大化 / 关闭按钮。</li>
+                <li>桌宠改为默认关闭，需要时在设置 → 桌宠里开启，托盘菜单的显示 / 隐藏与该开关保持同步。</li>
+                <li>一键补齐环境强化：自动复检安装进度、失败汇总、支持国内镜像加速，修复新版 macOS pip 被 PEP 668 拦截的问题。</li>
+                <li>Windows 一键安装修复 PowerShell 启动报错，UAC 被拒绝时自动降级继续，缺少 winget 时自动补装。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 0.9.9</strong>
+                <time>Living Assistant 界面</time>
+              </div>
+              <ul>
+                <li>重构主界面为 800×600 Living Assistant Lens 胶囊窗口，取消外层页面背景，让软件本体直接成为动态舱体。</li>
+                <li>新增舱体鼠标跟随高光、呼吸光、轨道环和双层电流边框动效。</li>
+                <li>能力入口改为右上角半隐藏胶囊，鼠标悬停或聚焦时展开历史、工作台、模型和设置。</li>
+                <li>助手回复改为纯文字显示，去掉消息背景、模型提示行和普通回复里的模型自报。</li>
+                <li>移除镜头界面的品牌标识、欢迎文案、输入框提示字和上下文状态标签，让画面更接近沉浸式助手。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
+                <strong>neo 0.9.8.1</strong>
+                <time>Kimi 与模型路由修复</time>
+              </div>
+              <ul>
+                <li>修复手动选择 Kimi 等模型后，普通文字消息仍被自动切换到本地演示模型的问题。</li>
+                <li>自动切换只用于图片任务；文字任务始终使用底部当前选择的供应商和模型。</li>
+                <li>适配 Kimi K2.6/K2.5 固定采样参数，避免测试连接和聊天请求因 temperature 报错。</li>
+                <li>Kimi 预设改为国内和 Global 分开，减少 API Key 与 Base URL 混用导致的认证错误。</li>
+                <li>认证失败提示会显示具体供应商和模型，方便检查对应 API Key 与 Base URL。</li>
+              </ul>
+            </article>
+            <article class="release-note">
+              <div>
                 <strong>neo 0.9.7</strong>
-                <time>当前版本</time>
+                <time>打包体验</time>
               </div>
               <ul>
                 <li>macOS 打包时弱化内部 Helper 的对外显示名，减少 Finder 和 Spotlight 搜索 neo 时的误解。</li>
@@ -367,6 +510,10 @@
           </header>
           <div id="environmentList" class="environment-list"></div>
           <pre id="environmentOutput" class="environment-output"></pre>
+          <label class="environment-no-prompt">
+            <input id="environmentMirrorCheck" type="checkbox" />
+            <span>使用国内镜像加速安装（大陆网络推荐）</span>
+          </label>
           <footer class="modal-actions">
             <button id="installMissingEnvironmentBtn" class="primary-button" type="button">一键补齐环境</button>
             <button id="copyEnvironmentCommandBtn" class="ghost-button" type="button">复制命令</button>
@@ -413,6 +560,17 @@
                 <label>模型<select id="activeModelSelect"></select></label>
               </div>
               <label>自定义模型名<input id="customModelInput" placeholder="留空使用上方选项" spellcheck="false" /></label>
+              <div class="model-form-grid">
+                <label>思考强度
+                  <select id="modelThinkingSelect">
+                    <option value="fast">快速</option>
+                    <option value="balanced">平衡</option>
+                    <option value="deep">深度</option>
+                  </select>
+                </label>
+                <label>温度<input id="temperatureInput" type="number" step="0.1" min="0" max="2" /></label>
+                <label>最大输出<input id="maxTokensInput" type="number" step="128" min="0" /></label>
+              </div>
               <div class="model-actions-row">
                 <span>用于普通对话和未命中路由的请求</span>
                 <button id="testApiBtn" class="primary-button" type="button">测试连接</button>
@@ -457,8 +615,8 @@
                   <option value="true">开启</option>
                   <option value="false">关闭</option>
                 </select></label>
-                <label>文字供应商<select id="textRouteProviderSelect"></select></label>
-                <label>文字模型<select id="textRouteModelSelect"></select></label>
+                <label>文字使用当前供应商<select id="textRouteProviderSelect"></select></label>
+                <label>文字使用当前模型<select id="textRouteModelSelect"></select></label>
                 <label>图片供应商<select id="visionRouteProviderSelect"></select></label>
                 <label>图片模型<select id="visionRouteModelSelect"></select></label>
               </div>
@@ -470,6 +628,22 @@
 
       <!-- ── 外观 ── -->
       <div class="settings-pane" data-settings-pane="appearance">
+        <div class="pane-group">
+          <label class="toggle-row">
+            <span>
+              <strong>浅色主题</strong>
+              <small>把沉浸式界面从深色切换为浅色配色</small>
+            </span>
+            <input id="lensThemeToggle" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>
+              <strong>流畅优先</strong>
+              <small>关闭玻璃模糊、电光边框和粒子动效，低配电脑更顺滑</small>
+            </span>
+            <input id="performanceModeToggle" type="checkbox" />
+          </label>
+        </div>
         <div class="pane-group appearance-overview">
           <div class="pane-group-title pane-group-title-row">
             <span>整体</span>
@@ -660,10 +834,6 @@
             </div>
             <textarea id="externalPathsInput" rows="3" spellcheck="false" placeholder="/Users/li/Desktop/文件.xlsx"></textarea>
           </div>
-          <div class="settings-grid">
-            <label>温度<input id="temperatureInput" type="number" step="0.1" min="0" max="2" /></label>
-            <label>最大输出<input id="maxTokensInput" type="number" step="128" min="0" /></label>
-          </div>
         </div>
       </div>
 
@@ -741,6 +911,15 @@
 
       <!-- ── 桌宠 (Petdex) ── -->
       <div class="settings-pane" data-settings-pane="petdex">
+        <div class="pane-group">
+          <label class="toggle-row">
+            <span>
+              <strong>启用桌宠</strong>
+              <small>在桌面显示悬浮桌宠，默认关闭</small>
+            </span>
+            <input id="petEnabledToggle" type="checkbox" />
+          </label>
+        </div>
         <div class="pane-group">
           <div class="pane-group-title pane-group-title-row">
             <span>当前桌宠</span>
@@ -820,6 +999,10 @@
         <div id="environmentModalList" class="environment-list"></div>
         <pre id="environmentModalOutput" class="environment-output"></pre>
         <label class="environment-no-prompt">
+          <input id="environmentModalMirrorCheck" type="checkbox" />
+          <span>使用国内镜像加速安装（大陆网络推荐）</span>
+        </label>
+        <label class="environment-no-prompt">
           <input id="environmentNoPromptCheck" type="checkbox" />
           <span>不再提示</span>
         </label>
@@ -832,5 +1015,6 @@
     </div>
 
     <script src="/app.js"></script>
+    <script type="module" src="/laser-flow.js"></script>
   </body>
 </html>

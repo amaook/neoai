@@ -1278,7 +1278,8 @@ if (window.petBridge) {
 
 // ── Petdex 精灵图 ─────────────────────────────────────────────────
 
-const PETDEX_LEGACY_SPRITE_BASE = "https://petdex.crafter.run/pets";
+// petdex.crafter.run 已迁移到 assets.petdex.dev，旧域名资产 404
+const PETDEX_LEGACY_SPRITE_BASE = "https://assets.petdex.dev/curated";
 let petdexSpriteTimer = null;
 let petdexCurrentKey = "";
 let petdexCurrentPet = null;
@@ -1293,10 +1294,12 @@ function clearPetdexSprite() {
 function normalizePetdexSelection(value, fallbackSlug = "") {
   const slug = String(value?.slug || fallbackSlug || "").trim();
   if (!slug) return null;
+  // 存档里旧域名的图片地址已失效，清掉让 slug 兜底拼新地址
+  const spritesheetUrl = String(value?.spritesheetUrl || "").trim();
   return {
     slug,
     displayName: String(value?.displayName || value?.name || slug).trim(),
-    spritesheetUrl: String(value?.spritesheetUrl || "").trim()
+    spritesheetUrl: spritesheetUrl.includes("petdex.crafter.run") ? "" : spritesheetUrl
   };
 }
 

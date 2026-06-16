@@ -401,6 +401,112 @@ describe("agent flow", () => {
     expect(done.content).toContain("没有传入必要工具参数");
   });
 
+  it("reports max_tokens truncation instead of executing an incomplete streamed tool call", async () => {
+    server = await startTestServer();
+    const modelCalls = mockModelFetch([
+      sseModelResponse([
+        openAIChunk({ delta: { tool_calls: [{ index: 0, id: "call_trunc", type: "function", function: { name: "write_file", arguments: "{\"path\":\"notes/trunc.md\",\"content\":\"hel" } }] } }),
+        openAIChunk({ delta: {}, finish_reason: "length" }),
+        "data: [DONE]\n\n"
+      ])
+    ]);
+
+    const response = await postText("/api/chat", {
+      provider,
+      model: "agent-test",
+      stream: true,
+      enableTools: true,
+      enabledSkills: ["local-files"],
+      toolConsent: { fileRead: true, fileWrite: true },
+      messages: [{ role: "user", content: "写一个很长的文件" }]
+    });
+
+    expect(response.status).toBe(200);
+    expect(modelCalls).toHaveLength(1);
+    const events = parseSseEvents(response.body);
+    expect(events.map((event) => event.type)).toEqual(["max_tokens_truncated", "done"]);
+    expect(events[0]).toMatchObject({ type: "max_tokens_truncated", finishReason: "length", toolNames: ["write_file"] });
+    const done = events.find((event) => event.type === "done");
+    expect(done.maxTokensTruncated).toBe(true);
+    expect(done.content).toContain("max_tokens 截断");
+    expect(done.content).toContain("调大 maxTokens");
+    expect(done.content).not.toContain("没有传入必要工具参数");
+    expect(done.steps).toEqual([]);
+    expect(await exists(path.join(workspaceRoot, "notes", "trunc.md"))).toBe(false);
+  });
+
+  it("reports max_tokens truncation for non-streaming tool calls without executing them", async () => {
+    server = await startTestServer();
+    const modelCalls = mockModelFetch([
+      jsonModelResponse({
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "call_cut", type: "function", function: { name: "write_file", arguments: "{\"path\":\"notes/cut.md\",\"content\":\"hel" } }]
+        },
+        finish_reason: "length"
+      })
+    ]);
+
+    const response = await postJson("/api/chat", {
+      provider,
+      model: "agent-test",
+      stream: false,
+      enableTools: true,
+      enabledSkills: ["local-files"],
+      toolConsent: { fileRead: true, fileWrite: true },
+      messages: [{ role: "user", content: "写一个很长的文件" }]
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.maxTokensTruncated).toBe(true);
+    expect(response.body.content).toContain("max_tokens 截断");
+    expect(response.body.content).toContain("调大 maxTokens");
+    expect(response.body.steps).toEqual([]);
+    expect(modelCalls).toHaveLength(1);
+    expect(await exists(path.join(workspaceRoot, "notes", "cut.md"))).toBe(false);
+  });
+
+  it("distinguishes repeated argument JSON parse failures from missing arguments in the fuse message", async () => {
+    server = await startTestServer();
+    const truncatedArgs = "{\"path\":\"notes/bad.md\",\"content\":\"hel";
+    const brokenToolCallRound = (id) => sseModelResponse([
+      openAIChunk({ delta: { tool_calls: [{ index: 0, id, type: "function", function: { name: "write_file", arguments: truncatedArgs } }] } }),
+      openAIChunk({ delta: {}, finish_reason: "tool_calls" }),
+      "data: [DONE]\n\n"
+    ]);
+    const modelCalls = mockModelFetch([
+      brokenToolCallRound("call_bad_1"),
+      brokenToolCallRound("call_bad_2")
+    ]);
+
+    const response = await postText("/api/chat", {
+      provider,
+      model: "agent-test",
+      stream: true,
+      enableTools: true,
+      enabledSkills: ["local-files"],
+      toolConsent: { fileRead: true, fileWrite: true },
+      messages: [{ role: "user", content: "写一个文件" }]
+    });
+
+    expect(response.status).toBe(200);
+    expect(modelCalls).toHaveLength(2);
+    const events = parseSseEvents(response.body);
+    expect(events.map((event) => event.type)).toContain("tool_arg_fuse");
+    const done = events.find((event) => event.type === "done");
+    expect(done.toolArgFuse).toMatchObject({ toolName: "write_file", count: 2, parseError: true });
+    expect(done.content).toContain("参数 JSON 解析失败");
+    expect(done.content).toContain("max_tokens");
+    expect(done.content).not.toContain("没有传入必要工具参数");
+    expect(done.steps[0]).toMatchObject({
+      name: "write_file",
+      result: { ok: false, toolArgError: true, argParseError: true }
+    });
+    expect(await exists(path.join(workspaceRoot, "notes", "bad.md"))).toBe(false);
+  });
+
   it("blocks model-emitted DSML pseudo tool calls instead of reporting fake completion", async () => {
     server = await startTestServer();
     const modelCalls = mockModelFetch([

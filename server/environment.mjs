@@ -30,6 +30,40 @@ export async function detectEnvironment() {
 
 // ── 共用工具 ─────────────────────────────────────────────────────────────────
 
+// 安装器把新路径写进注册表/磁盘后，neo 进程继承的还是启动时的旧 PATH，
+// 不刷新的话刚装好的 Node/Git 检测不到、智能体工具也用不了，必须重启应用。
+// 这里在每轮检测前把进程 PATH 和系统最新值合并（顺带让轮询能看到安装结果）。
+async function refreshWindowsProcessPath() {
+  const fresh = await new Promise((resolve) => {
+    execFile("powershell.exe", [
+      "-NoProfile", "-Command",
+      '[Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")'
+    ], { timeout: 8000 }, (error, stdout) => resolve(error ? "" : String(stdout || "").trim()));
+  });
+  if (!fresh) return;
+  const windowsApps = process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : "";
+  const merged = [];
+  const seen = new Set();
+  for (const entry of [...fresh.split(";"), windowsApps, ...(process.env.PATH || "").split(";")]) {
+    const trimmed = String(entry || "").trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(trimmed);
+  }
+  process.env.PATH = merged.join(";");
+}
+
+// macOS：从 GUI 启动的 Electron 进程往往没有 brew 的 PATH，刚装的工具会检测不到
+function ensureUnixBrewPath() {
+  const brewDirs = ["/opt/homebrew/bin", "/usr/local/bin"].filter((dir) => existsSync(dir));
+  if (!brewDirs.length) return;
+  const entries = (process.env.PATH || "").split(":").filter(Boolean);
+  const missing = brewDirs.filter((dir) => !entries.includes(dir));
+  if (missing.length) process.env.PATH = [...missing, ...entries].join(":");
+}
+
 async function commandInfo(command, versionCommand = `${command} --version`) {
   const pathCmd = process.platform === "win32" ? `where ${command}` : `command -v '${command}'`;
   const pathResult = await runCommand(pathCmd, 5000);
@@ -66,6 +100,7 @@ function environmentResult(items) {
 // ── macOS/Linux ───────────────────────────────────────────────────────────────
 
 async function detectUnixEnvironment() {
+  ensureUnixBrewPath();
   const [zsh, curl, brew, node, npm, git, rg] = await Promise.all([
     commandInfo("zsh", "zsh --version"),
     commandInfo("curl", "curl --version | head -1"),
@@ -104,6 +139,7 @@ async function detectUnixEnvironment() {
 // ── Windows ────────────────────────────────────────────────────────────────
 
 async function detectWindowsEnvironment() {
+  await refreshWindowsProcessPath();
   const [powershell, winget, curl, node, npm, git, rg] = await Promise.all([
     commandInfo("powershell", 'powershell -NoProfile -Command "$PSVersionTable.PSVersion.ToString()"'),
     commandInfo("winget", "winget --version"),
@@ -152,49 +188,230 @@ function uniqueInstallCommands(candidates, skipIds = []) {
   return candidates.filter((item) => { if (skip.has(item.id) || seen.has(item.installCommand)) return false; seen.add(item.installCommand); return true; });
 }
 
+// ── 国内镜像加速（大陆网络下 GitHub/PyPI/npm 源经常拉不动） ───────────────────
+const PIP_MIRROR_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple";
+const NPM_MIRROR_REGISTRY = "https://registry.npmmirror.com";
+
+function unixBrewMirrorExports() {
+  return [
+    'export HOMEBREW_INSTALL_FROM_API=1',
+    'export HOMEBREW_API_DOMAIN="https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api"',
+    'export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"',
+    'export HOMEBREW_BREW_GIT_REMOTE="https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/brew.git"',
+    'export HOMEBREW_CORE_GIT_REMOTE="https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/homebrew-core.git"'
+  ];
+}
+
+function homebrewBootstrapCommand(useMirror = false) {
+  if (!useMirror) return '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
+  // TUNA 镜像官方推荐方式：从镜像 clone 安装脚本后执行
+  return [
+    'neo_brew_install_dir="$(mktemp -d)/brew-install"',
+    'git clone --depth=1 https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/install.git "$neo_brew_install_dir"',
+    '/bin/bash "$neo_brew_install_dir/install.sh"',
+    'rm -rf "$neo_brew_install_dir"'
+  ].join("\n");
+}
+
+/** 给 pip / npm 安装行追加镜像源参数（不改动 brew/winget 行） */
+function applyMirrorToCommand(command) {
+  return String(command).split("\n").map((line) => {
+    if (line.includes("-m pip install") && !line.includes(PIP_MIRROR_INDEX)) {
+      return line.split("||").map((part) => part.includes("-m pip install") ? `${part.trim()} -i ${PIP_MIRROR_INDEX}` : part.trim()).join(" || ");
+    }
+    if (/\bnpm install\b/.test(line) && !line.includes("--registry")) {
+      return `${line} --registry=${NPM_MIRROR_REGISTRY}`;
+    }
+    return line;
+  }).join("\n");
+}
+
+/** 去掉跨条目重复的 brew/winget 安装行（如 python 与 openpyxl 都带 brew install python） */
+function dedupeInstallLines(command, seenLines) {
+  const kept = String(command).split("\n").filter((line) => {
+    const normalized = line.trim();
+    if (!/^(brew|winget) install /.test(normalized)) return true;
+    if (seenLines.has(normalized)) return false;
+    seenLines.add(normalized);
+    return true;
+  });
+  const result = kept.join("\n").trim();
+  return result;
+}
+
 function homebrewShellEnvCommand() {
   return ['if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi', 'if [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi'].join("\n");
 }
 
-function buildUnixInstallMissingScript(env, includeRecommended = true) {
+function buildUnixInstallMissingScript(env, includeRecommended = true, useMirror = false) {
   const candidates = installCandidates(env, includeRecommended);
   if (!candidates.length) return "";
   const uniqueCommands = uniqueInstallCommands(candidates, ["homebrew"]);
   const needsHomebrew = candidates.some((i) => i.id === "homebrew" || /\bbrew\s+/.test(i.installCommand));
   const brewInstalled = env.items.find((i) => i.id === "homebrew")?.status === "ok";
-  const lines = ["set -e", 'echo "[neo] 开始补齐运行环境..."', 'echo ""'];
-  if (needsHomebrew && !brewInstalled) { lines.push('echo "[neo] 安装 Homebrew..."', '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"', homebrewShellEnvCommand(), 'echo ""'); }
-  else if (needsHomebrew) { lines.push(homebrewShellEnvCommand()); }
-  for (const item of uniqueCommands) { lines.push(`echo "[neo] 安装/更新 ${item.label}..."`, item.installCommand, 'echo ""'); }
-  lines.push('echo "[neo] 环境补齐完成。"', 'echo "[neo] 请回到 neo 点击重新检测。"', 'printf "按任意键关闭此窗口..."', "read -k 1");
+  // 不再 set -e：单项失败继续装后面的，最后统一汇总
+  const lines = ["neo_failed=''", 'echo "[neo] 开始补齐运行环境..."', 'echo ""'];
+  if (useMirror && needsHomebrew) lines.push(...unixBrewMirrorExports());
+  if (needsHomebrew && !brewInstalled) {
+    lines.push(
+      'echo "[neo] 安装 Homebrew..."',
+      homebrewBootstrapCommand(useMirror),
+      homebrewShellEnvCommand(),
+      'command -v brew >/dev/null 2>&1 || { echo "[neo] Homebrew 安装失败，后续依赖它的项无法继续。"; neo_failed="$neo_failed Homebrew"; }',
+      'echo ""'
+    );
+  } else if (needsHomebrew) {
+    lines.push(homebrewShellEnvCommand());
+  }
+  const seenInstallLines = new Set();
+  for (const item of uniqueCommands) {
+    let command = useMirror ? applyMirrorToCommand(item.installCommand) : item.installCommand;
+    command = dedupeInstallLines(command, seenInstallLines);
+    if (!command) continue;
+    lines.push(
+      `echo "[neo] 安装/更新 ${item.label}..."`,
+      `if (\n${command}\n); then echo "[neo] ✓ ${item.label} 完成"; else neo_failed="$neo_failed ${item.label}"; echo "[neo] ✗ ${item.label} 安装失败，继续后续项"; fi`,
+      'echo ""'
+    );
+  }
+  lines.push(
+    'if [ -z "$neo_failed" ]; then echo "[neo] 环境补齐完成，neo 会自动刷新检测结果。"; else echo "[neo] 以下环境项安装失败：$neo_failed"; echo "[neo] 可以把上方报错复制给 neo，让它帮你处理。"; fi',
+    'printf "按任意键关闭此窗口..."',
+    "read -k 1 2>/dev/null || read -n 1"
+  );
   return lines.join("\n");
 }
 
 function windowsWingetBootstrapLines() {
-  return ['$windowsApps = Join-Path $env:LOCALAPPDATA "Microsoft\\WindowsApps"', 'if ($env:PATH -notlike "*$windowsApps*") { $env:PATH = "$windowsApps;$env:PATH" }', "", "function Refresh-WinGetPath {", '  $paths = @($windowsApps, "$env:ProgramFiles\\WindowsApps")', "  foreach ($candidate in $paths) {", '    if ($candidate -and (Test-Path $candidate) -and $env:PATH -notlike "*$candidate*") {', '      $env:PATH = "$candidate;$env:PATH"', "    }", "  }", "}", "", "function Refresh-EnvPath {", '  $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")', '  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")', '  $env:PATH = @($machinePath, $userPath, $windowsApps, $env:PATH) -join ";"', "  Refresh-WinGetPath", "}", "", "function Ensure-WinGet {", "  Refresh-WinGetPath", "  if (Get-Command winget -ErrorAction SilentlyContinue) {", '    Write-Host "[neo] winget 已可用。"', "    return", "  }", "", '  Write-Host "[neo] 正在注册 Microsoft App Installer / winget..."', "  try {", "    Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction Stop", "  } catch {", '    Write-Host "[neo] 注册现有 App Installer 未完成，继续尝试修复安装..."', '    Write-Host $_.Exception.Message', "  }", "  Refresh-WinGetPath", "  if (Get-Command winget -ErrorAction SilentlyContinue) { Write-Host '[neo] winget 注册完成。'; return }", '  Write-Host "[neo] 仍未检测到 winget，将打开 Microsoft App Installer 官方下载页。"', '  Start-Process "https://aka.ms/getwinget"', '  throw "winget 未可用。请完成 Microsoft App Installer 安装后，回到 neo 重新点击一键补齐环境。"', "}", "", "Ensure-WinGet", "winget source update --disable-interactivity"];
+  return [
+    '$windowsApps = Join-Path $env:LOCALAPPDATA "Microsoft\\WindowsApps"',
+    'if ($env:PATH -notlike "*$windowsApps*") { $env:PATH = "$windowsApps;$env:PATH" }',
+    // 老系统 PowerShell 5 默认 TLS 配置可能下载不了 https
+    "try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072 } catch {}",
+    "",
+    "function Refresh-WinGetPath {",
+    '  $paths = @($windowsApps, "$env:ProgramFiles\\WindowsApps")',
+    "  foreach ($candidate in $paths) {",
+    '    if ($candidate -and (Test-Path $candidate) -and $env:PATH -notlike "*$candidate*") {',
+    '      $env:PATH = "$candidate;$env:PATH"',
+    "    }",
+    "  }",
+    "}",
+    "",
+    "function Refresh-EnvPath {",
+    '  $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")',
+    '  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")',
+    '  $env:PATH = @($machinePath, $userPath, $windowsApps, $env:PATH) -join ";"',
+    "  Refresh-WinGetPath",
+    "}",
+    "",
+    "function Install-WinGetPackageFile {",
+    // 直接下载官方 msixbundle 静默安装；缺 VCLibs 依赖时补装后重试
+    '  $wingetTmp = Join-Path $env:TEMP "neo-winget"',
+    "  New-Item -ItemType Directory -Force -Path $wingetTmp | Out-Null",
+    '  $bundle = Join-Path $wingetTmp "winget.msixbundle"',
+    '  Write-Host "[neo] 正在下载 winget 安装包（视网络可能需要几分钟）..."',
+    '  Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile $bundle -UseBasicParsing',
+    "  try {",
+    "    Add-AppxPackage -Path $bundle -ErrorAction Stop",
+    "  } catch {",
+    '    Write-Host "[neo] 直接安装未成功，补充 VCLibs 运行库后重试..."',
+    '    $vclibs = Join-Path $wingetTmp "vclibs.appx"',
+    '    Invoke-WebRequest -Uri "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" -OutFile $vclibs -UseBasicParsing',
+    "    Add-AppxPackage -Path $vclibs -ErrorAction SilentlyContinue",
+    "    Add-AppxPackage -Path $bundle -ErrorAction Stop",
+    "  }",
+    "}",
+    "",
+    "function Ensure-WinGet {",
+    "  Refresh-WinGetPath",
+    "  if (Get-Command winget -ErrorAction SilentlyContinue) {",
+    '    Write-Host "[neo] winget 已可用。"',
+    "    return",
+    "  }",
+    "",
+    '  Write-Host "[neo] 正在注册 Microsoft App Installer / winget..."',
+    "  try {",
+    "    Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction Stop",
+    "  } catch {",
+    '    Write-Host "[neo] 注册现有 App Installer 未完成，尝试自动下载安装..."',
+    "  }",
+    "  Refresh-WinGetPath",
+    "  if (Get-Command winget -ErrorAction SilentlyContinue) { Write-Host '[neo] winget 注册完成。'; return }",
+    "",
+    "  try {",
+    "    Install-WinGetPackageFile",
+    "  } catch {",
+    '    Write-Host "[neo] 自动安装 winget 未成功：$($_.Exception.Message)"',
+    "  }",
+    "  Refresh-WinGetPath",
+    "  if (Get-Command winget -ErrorAction SilentlyContinue) { Write-Host '[neo] winget 安装完成。'; return }",
+    "",
+    '  Write-Host "[neo] 仍未检测到 winget，将打开 Microsoft App Installer 官方下载页。"',
+    '  Start-Process "https://aka.ms/getwinget"',
+    '  throw "winget 未可用。请完成 Microsoft App Installer 安装后，回到 neo 重新点击一键补齐环境。"',
+    "}",
+    "",
+    "Ensure-WinGet",
+    "winget source update --disable-interactivity"
+  ];
 }
 
-function buildWindowsInstallScript(items) {
-  const lines = ['$ErrorActionPreference = "Stop"', 'Write-Host "[neo] 开始补齐运行环境..."', 'Write-Host ""', ...windowsWingetBootstrapLines(), 'Write-Host ""'];
+export function buildWindowsInstallScript(items, useMirror = false) {
+  const lines = ['$ErrorActionPreference = "Stop"', "$neoFailed = @()", 'Write-Host "[neo] 开始补齐运行环境..."', 'Write-Host ""', ...windowsWingetBootstrapLines(), 'Write-Host ""'];
+  const seenInstallLines = new Set();
   for (const item of items) {
     if (item.id === "winget") continue;
-    lines.push(`Write-Host "[neo] 安装/更新 ${item.label}..."`, item.installCommand, "Refresh-EnvPath", 'Write-Host ""');
+    let command = useMirror ? applyMirrorToCommand(item.installCommand) : item.installCommand;
+    command = dedupeInstallLines(command, seenInstallLines);
+    if (!command) continue;
+    // 单项失败计入汇总并继续后续项
+    lines.push(
+      `Write-Host "[neo] 安装/更新 ${item.label}..."`,
+      "try {",
+      command,
+      `  Write-Host "[neo] √ ${item.label} 完成"`,
+      "} catch {",
+      `  $neoFailed += ${powerShellQuote(item.label)}`,
+      `  Write-Host "[neo] × ${item.label} 安装失败：$($_.Exception.Message)，继续后续项"`,
+      "}",
+      "Refresh-EnvPath",
+      'Write-Host ""'
+    );
   }
-  lines.push('Write-Host "[neo] 环境补齐完成。"', 'Write-Host "[neo] 请回到 neo 点击重新检测。"', 'Read-Host "按回车关闭"');
+  lines.push(
+    "if ($neoFailed.Count -eq 0) {",
+    '  Write-Host "[neo] 环境补齐完成，neo 会自动刷新检测结果。"',
+    "} else {",
+    '  Write-Host "[neo] 以下环境项安装失败：$($neoFailed -join \'、\')"',
+    '  Write-Host "[neo] 可以把上方报错复制给 neo，让它帮你处理。"',
+    "}",
+    'Read-Host "按回车关闭"'
+  );
   return lines.join("\n");
 }
 
-export function buildInstallMissingScript(env, includeRecommended = true) {
+export function buildInstallMissingScript(env, includeRecommended = true, useMirror = false) {
   if (process.platform === "win32") {
     const candidates = installCandidates(env, includeRecommended);
     if (!candidates.length) return "";
-    return buildWindowsInstallScript(uniqueInstallCommands(candidates));
+    return buildWindowsInstallScript(uniqueInstallCommands(candidates), useMirror);
   }
-  return buildUnixInstallMissingScript(env, includeRecommended);
+  return buildUnixInstallMissingScript(env, includeRecommended, useMirror);
 }
 
-export function buildSingleInstallScript(env, item) {
-  return process.platform === "win32" ? buildWindowsInstallScript([item]) : item.installCommand;
+export function buildSingleInstallScript(env, item, useMirror = false) {
+  if (process.platform === "win32") return buildWindowsInstallScript([item], useMirror);
+  if (item.id === "homebrew") {
+    const lines = useMirror ? [...unixBrewMirrorExports(), homebrewBootstrapCommand(true)] : [homebrewBootstrapCommand(false)];
+    return lines.join("\n");
+  }
+  let command = useMirror ? applyMirrorToCommand(item.installCommand) : item.installCommand;
+  // brew 安装的单项在镜像模式下也走 bottle 镜像
+  if (useMirror && /\bbrew\s+/.test(command)) {
+    command = [...unixBrewMirrorExports(), homebrewShellEnvCommand(), command].join("\n");
+  }
+  return command;
 }
 
 // ── 终端打开 ─────────────────────────────────────────────────────────────────
@@ -207,7 +424,7 @@ function powerShellQuote(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
-async function writeTempInstallScript(command) {
+export async function writeTempInstallScript(command) {
   const fileName = `neo-ai-install-${process.pid}-${Date.now()}.ps1`;
   const candidates = [
     ctx.appStatePath ? path.join(path.dirname(ctx.appStatePath), "tmp") : "",
@@ -218,7 +435,9 @@ async function writeTempInstallScript(command) {
     try {
       await mkdir(dir, { recursive: true });
       const scriptPath = path.join(dir, fileName);
-      await writeFile(scriptPath, command, "utf8");
+      // 必须带 UTF-8 BOM：Windows PowerShell 5.1 读无 BOM 的 .ps1 会按
+      // 系统 ANSI（中文系统 GBK）解码，中文字符串变乱码并直接破坏语法。
+      await writeFile(scriptPath, "\uFEFF" + command, "utf8");
       return scriptPath;
     } catch (error) {
       lastError = error;
@@ -230,9 +449,18 @@ async function writeTempInstallScript(command) {
 export async function openTerminalCommand(command) {
   if (process.platform === "win32") {
     const scriptPath = await writeTempInstallScript(command);
-    const launchCommand = [`$arguments = @('-NoExit','-ExecutionPolicy','Bypass','-File',${powerShellQuote(scriptPath)})`, "Start-Process", "-FilePath powershell.exe", "-ArgumentList $arguments", "-Verb RunAs"].join(" ");
+    // 先尝试管理员窗口（一次 UAC 装完所有项）；用户在 UAC 点“否”时
+    // 自动降级为普通窗口，需要提权的包由 winget 逐个弹 UAC，不再整体失败。
+    const launchCommand = [
+      `$arguments = @('-NoExit','-ExecutionPolicy','Bypass','-File',${powerShellQuote(scriptPath)})`,
+      "try {",
+      "  Start-Process -FilePath powershell.exe -ArgumentList $arguments -Verb RunAs -ErrorAction Stop",
+      "} catch {",
+      "  Start-Process -FilePath powershell.exe -ArgumentList $arguments",
+      "}"
+    ].join("\n");
     return new Promise((resolve) => {
-      execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", launchCommand], { timeout: 10000 }, (error, stdout, stderr) => { resolve({ ok: !error, stdout: trimOutput(stdout), stderr: trimOutput(stderr), message: error?.message || "已打开 PowerShell 安装窗口", command }); });
+      execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", launchCommand], { timeout: 10000 }, (error, stdout, stderr) => { resolve({ ok: !error, stdout: trimOutput(stdout), stderr: trimOutput(stderr), message: error?.message || "已打开 PowerShell 安装窗口。若弹出系统权限提示，选“是”可一次装完；选“否”也会继续，由安装器按需提权。", command }); });
     });
   }
 

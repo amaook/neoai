@@ -234,14 +234,51 @@ body.layout-ready .app-shell {
   padding-right: 14px;
 }
 
-.titlebar-brand {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #2F2A27;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
+/* Windows 无边框窗口的自绘窗口控制按钮（仅桌面端 Windows 显示） */
+.win-window-controls {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+html.platform-win.desktop-mode .win-window-controls {
+  display: flex;
+}
+
+.win-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(213, 227, 226, 0.72);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.win-control-btn svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+
+.win-control-btn:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+}
+
+.win-control-btn.win-control-close:hover {
+  background: #e81123;
+  color: #ffffff;
 }
 
 .app-shell {
@@ -668,11 +705,12 @@ body.workspace-closed .right-resize {
   gap: 0;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: none;
   padding: 24px 0 16px;
 }
 
-.message-list::-webkit-scrollbar { width: 5px; }
-.message-list::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+.message-list::-webkit-scrollbar { width: 0; height: 0; }
+.message-list::-webkit-scrollbar-thumb { background: transparent; }
 
 /* ── Hero ── */
 
@@ -781,6 +819,19 @@ body.workspace-closed .right-resize {
 .message.assistant .bubble > :first-child { margin-top: 0; }
 .message.assistant .bubble > :last-child { margin-bottom: 0; }
 .message.assistant .bubble p { margin: 0 0 9px; }
+/* 流式打字光标：跟在正在生成的文字末尾 */
+.stream-caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.02em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  opacity: 0.55;
+  border-radius: 1.5px;
+  animation: neo-stream-caret 1s steps(1, end) infinite;
+}
+@keyframes neo-stream-caret { 0%, 50% { opacity: 0.55; } 50.01%, 100% { opacity: 0; } }
 .message.assistant .bubble h3 {
   margin: 14px 0 6px;
   font-size: 14px;
@@ -885,6 +936,12 @@ body.workspace-closed .right-resize {
   background: #D97757;
   box-shadow: 0 0 0 4px rgba(217, 119, 87, 0.10);
   animation: neo-stream-caret 1.18s ease-in-out infinite;
+}
+
+.message.error .error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .message.error .bubble {
@@ -1366,7 +1423,8 @@ body.workspace-closed .right-resize {
 
 .task-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* auto-fit：第 5 个指标（错误）出现时收窄并排，而不是孤儿换行 */
+  grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
   gap: 6px;
 }
 
@@ -1655,6 +1713,85 @@ body.workspace-closed .right-resize {
   justify-content: flex-end;
   gap: 5px;
 }
+
+/* 操作审计日志（1.8 护栏） */
+.audit-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.audit-toolbar strong { font-size: 13px; font-weight: 650; }
+.audit-toolbar-actions { display: flex; gap: 5px; }
+
+.audit-hint {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.audit-log-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.audit-log-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.audit-status {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.audit-ok .audit-status { background: rgba(22, 163, 74, 0.12); color: var(--green); }
+.audit-fail .audit-status { background: rgba(220, 38, 38, 0.12); color: var(--danger); }
+.audit-fail { border-color: rgba(220, 38, 38, 0.28); }
+
+.audit-main { display: grid; gap: 2px; min-width: 0; }
+
+.audit-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.audit-head strong { font-size: 12px; font-weight: 650; }
+.audit-time { color: var(--muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
+.audit-duration { color: var(--muted-strong); font-size: 11px; white-space: nowrap; }
+
+.audit-args,
+.audit-paths,
+.audit-error {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-args { color: var(--muted); }
+.audit-paths { color: var(--muted-strong); }
+.audit-error { color: var(--danger); }
 
 .office-task-mini {
   display: grid;
@@ -2248,12 +2385,30 @@ body.workspace-closed .right-resize {
   white-space: nowrap;
 }
 
+/* 以面板实际宽度为准做响应式（lens 模式下视口宽但面板窄，视口媒体查询不可靠） */
+.model-settings-pane {
+  container-type: inline-size;
+}
+
 .model-settings-main {
   display: grid;
   grid-template-columns: minmax(230px, 270px) minmax(0, 1fr);
   gap: 14px;
   align-items: stretch;
   min-height: 0;
+}
+
+@container (max-width: 700px) {
+  .model-settings-main { grid-template-columns: 1fr; }
+}
+
+@container (min-width: 701px) {
+  /* 左栏内容短，吸顶跟随右栏滚动，避免滚到下方左侧大片留白 */
+  .model-provider-panel {
+    position: sticky;
+    top: 0;
+    align-self: start;
+  }
 }
 
 .model-provider-panel,
@@ -2276,7 +2431,8 @@ body.workspace-closed .right-resize {
 
 .model-form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* 列宽不足 220px 时自动折成单列，避免下拉框内容截断 */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 10px;
 }
 
@@ -2286,6 +2442,11 @@ body.workspace-closed .right-resize {
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+}
+
+.model-actions-row .primary-button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .model-actions-row > span {
@@ -2318,7 +2479,7 @@ body.workspace-closed .right-resize {
 
 .route-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 9px;
 }
 
@@ -2817,7 +2978,7 @@ body.workspace-closed .right-resize {
   font-size: 12px;
 }
 
-.api-test-output:empty { display: none; }
+.api-test-output:empty, .environment-output:empty { display: none; }
 
 .provider-list {
   display: grid;
@@ -3415,12 +3576,6 @@ body::before {
   padding-right: 12px;
 }
 
-.titlebar-brand {
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 650;
-}
-
 .titlebar-sidebar-toggle,
 .titlebar-workspace-toggle {
   width: 30px;
@@ -3580,6 +3735,46 @@ body.resizing .resize-handle::after {
 .workspace-card.drop-active::after {
   border-radius: 0;
   background: rgba(255, 255, 255, 0.78);
+}
+
+.laser-flow-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.78;
+  contain: layout paint;
+}
+
+.laser-flow-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0.74) 72%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.52), transparent 34%, transparent 66%, rgba(255, 255, 255, 0.52));
+}
+
+.workspace-card > :not(.laser-flow-stage) {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-card.has-messages .laser-flow-stage {
+  opacity: 0.24;
+}
+
+html.platform-win .laser-flow-stage {
+  opacity: 0.62;
+}
+
+.laser-flow-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .message-list {
@@ -4043,49 +4238,6 @@ body.resizing .resize-handle::after {
   padding: 12px;
 }
 
-.workspace-status-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 42px;
-  padding: 0 12px;
-  border: 1px solid rgba(1, 105, 204, 0.12);
-  border-radius: 13px;
-  background: rgba(1, 105, 204, 0.045);
-  color: #2F3D50;
-}
-
-.workspace-status-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.workspace-status-main strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 680;
-}
-
-.workspace-status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #22C55E;
-  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.10);
-}
-
-#workspaceStatusVersion {
-  flex: 0 0 auto;
-  color: #77808B;
-  font-size: 10.5px;
-  font-weight: 650;
-}
-
 /* ── 0.9.6: 三栏整体区域与版本更新内容 ───────────────────────── */
 
 .main {
@@ -4256,6 +4408,1030 @@ body.resizing .resize-handle::after {
   line-height: 1.5;
 }
 
+/* ── React Bits 风格边缘辉光：侧栏、输入框、工作台 ───────────── */
+
+body::before {
+  background:
+    radial-gradient(circle at 50% 34%, rgba(87, 79, 255, 0.13), transparent 30%),
+    radial-gradient(circle at 80% 68%, rgba(31, 122, 255, 0.12), transparent 28%),
+    linear-gradient(135deg, rgba(4, 6, 14, 0.98), rgba(8, 10, 22, 0.98));
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+html.platform-win body::before {
+  background:
+    radial-gradient(circle at 50% 34%, rgba(87, 79, 255, 0.13), transparent 30%),
+    radial-gradient(circle at 80% 68%, rgba(31, 122, 255, 0.12), transparent 28%),
+    linear-gradient(135deg, #04060e, #080a16);
+}
+
+.ambient-glow {
+  background:
+    radial-gradient(circle at 52% 26%, rgba(114, 101, 255, 0.16), transparent 24%),
+    radial-gradient(circle at 78% 64%, rgba(34, 137, 255, 0.13), transparent 24%),
+    radial-gradient(circle at 16% 52%, rgba(174, 83, 255, 0.08), transparent 25%);
+  opacity: 0.86;
+}
+
+.ambient-motion {
+  opacity: 0.36;
+  mix-blend-mode: screen;
+}
+
+.window-titlebar {
+  background: rgba(4, 6, 14, 0.62);
+  color: #EAF0FF;
+}
+
+.workspace-toggle {
+  color: rgba(214, 226, 255, 0.74);
+}
+
+.main {
+  --ink: #F3F7FF;
+  --text: #F3F7FF;
+  --muted: #7D879E;
+  --muted-strong: #A8B2CC;
+  --line: rgba(91, 146, 255, 0.18);
+  --line-strong: rgba(91, 146, 255, 0.34);
+
+  background:
+    radial-gradient(circle at 50% 28%, rgba(111, 91, 255, 0.11), transparent 30%),
+    linear-gradient(180deg, rgba(4, 6, 14, 0.08), rgba(4, 6, 14, 0.16));
+}
+
+.workspace-card {
+  background: transparent;
+}
+
+.hero h1 {
+  color: #F7FAFF;
+  text-shadow: 0 0 22px rgba(104, 137, 255, 0.22);
+}
+
+.hero p {
+  color: rgba(177, 187, 214, 0.72);
+}
+
+.neo-border-glow {
+  --edge-proximity: 0;
+  --cursor-angle: 45deg;
+  --edge-sensitivity: 18;
+  --color-sensitivity: calc(var(--edge-sensitivity) + 14);
+  --border-radius: 16px;
+  --glow-padding: 28px;
+  --cone-spread: 24;
+  --fill-opacity: 0.28;
+  --card-bg: rgba(var(--glowui-panel-rgb), 0.82);
+  --card-bg-flat: rgba(var(--glowui-panel-rgb), 0.92);
+  --glow-color: hsl(var(--glowui-glow-hsl) / 100%);
+  --glow-color-60: hsl(var(--glowui-glow-hsl) / 60%);
+  --glow-color-50: hsl(var(--glowui-glow-hsl) / 50%);
+  --glow-color-40: hsl(var(--glowui-glow-hsl) / 40%);
+  --glow-color-30: hsl(var(--glowui-glow-hsl) / 30%);
+  --glow-color-20: hsl(var(--glowui-glow-hsl) / 20%);
+  --glow-color-10: hsl(var(--glowui-glow-hsl) / 10%);
+
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  transform: translate3d(0, 0, 0.01px);
+  border: 1px solid rgba(var(--glowui-blue-rgb), 0.68) !important;
+  border-radius: var(--border-radius) !important;
+  background: var(--card-bg) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--glowui-blue-rgb), 0.14),
+    inset 0 0 34px rgba(var(--glowui-blue-rgb), 0.13),
+    0 0 0 1px rgba(var(--glowui-blue-rgb), 0.22),
+    0 0 22px rgba(var(--glowui-blue-rgb), 0.18),
+    0 0 58px rgba(var(--glowui-violet-rgb), 0.11) !important;
+}
+
+.neo-border-glow > :not(.edge-light) {
+  position: relative;
+  z-index: 2;
+}
+
+.neo-border-glow::before,
+.neo-border-glow::after,
+.neo-border-glow > .edge-light {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: opacity 220ms ease-out;
+}
+
+.neo-border-glow::before {
+  z-index: 1;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--card-bg-flat) 0 100%) padding-box,
+    radial-gradient(at 82% 18%, var(--glowui-cyan) 0, transparent 46%) border-box,
+    radial-gradient(at 14% 42%, var(--glowui-violet) 0, transparent 44%) border-box,
+    radial-gradient(at 64% 86%, var(--glowui-blue) 0, transparent 48%) border-box,
+    linear-gradient(120deg, var(--glowui-blue), var(--glowui-violet), var(--glowui-cyan)) border-box;
+  opacity: clamp(0, calc((var(--edge-proximity) - var(--color-sensitivity)) / (100 - var(--color-sensitivity))), 1);
+  -webkit-mask-image:
+    conic-gradient(
+      from var(--cursor-angle) at center,
+      black calc(var(--cone-spread) * 1%),
+      transparent calc((var(--cone-spread) + 14) * 1%),
+      transparent calc((100 - var(--cone-spread) - 14) * 1%),
+      black calc((100 - var(--cone-spread)) * 1%)
+    );
+  mask-image:
+    conic-gradient(
+      from var(--cursor-angle) at center,
+      black calc(var(--cone-spread) * 1%),
+      transparent calc((var(--cone-spread) + 14) * 1%),
+      transparent calc((100 - var(--cone-spread) - 14) * 1%),
+      black calc((100 - var(--cone-spread)) * 1%)
+    );
+}
+
+.neo-border-glow::after {
+  z-index: 1;
+  border: 1px solid transparent;
+  background:
+    radial-gradient(at 78% 20%, rgba(var(--glowui-cyan-rgb), 0.7), transparent 48%) padding-box,
+    radial-gradient(at 14% 50%, rgba(var(--glowui-violet-rgb), 0.62), transparent 46%) padding-box,
+    radial-gradient(at 62% 84%, rgba(var(--glowui-blue-rgb), 0.58), transparent 48%) padding-box;
+  opacity: clamp(0, calc(var(--fill-opacity) * (var(--edge-proximity) - var(--color-sensitivity)) / (100 - var(--color-sensitivity))), 0.38);
+  mix-blend-mode: screen;
+  -webkit-mask-image:
+    linear-gradient(to bottom, black, black),
+    radial-gradient(ellipse at 50% 50%, black 38%, transparent 68%),
+    conic-gradient(from var(--cursor-angle) at center, transparent 5%, black 15%, black 85%, transparent 95%);
+  -webkit-mask-composite: source-out, source-over;
+  mask-image:
+    linear-gradient(to bottom, black, black),
+    radial-gradient(ellipse at 50% 50%, black 38%, transparent 68%),
+    conic-gradient(from var(--cursor-angle) at center, transparent 5%, black 15%, black 85%, transparent 95%);
+  mask-composite: subtract, add;
+}
+
+.neo-border-glow > .edge-light {
+  z-index: 1;
+  inset: calc(var(--glow-padding) * -1);
+  opacity: clamp(0, calc((var(--edge-proximity) - var(--edge-sensitivity)) / (100 - var(--edge-sensitivity))), 1);
+  mix-blend-mode: screen;
+  -webkit-mask-image:
+    conic-gradient(from var(--cursor-angle) at center, black 2.5%, transparent 11%, transparent 89%, black 97.5%);
+  mask-image:
+    conic-gradient(from var(--cursor-angle) at center, black 2.5%, transparent 11%, transparent 89%, black 97.5%);
+}
+
+.neo-border-glow > .edge-light::before {
+  content: "";
+  position: absolute;
+  inset: var(--glow-padding);
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px var(--glow-color),
+    inset 0 0 4px var(--glow-color-50),
+    inset 0 0 14px var(--glow-color-30),
+    inset 0 0 34px var(--glow-color-20),
+    0 0 2px var(--glow-color-60),
+    0 0 10px var(--glow-color-40),
+    0 0 26px var(--glow-color-30),
+    0 0 54px var(--glow-color-10);
+}
+
+.sidebar.neo-border-glow {
+  --border-radius: 0 16px 16px 0;
+  --glow-padding: 24px;
+  --card-bg: linear-gradient(180deg, rgba(var(--glowui-panel-rgb), 0.96), rgba(var(--glowui-panel-deep-rgb), 0.92));
+  --card-bg-flat: rgba(var(--glowui-panel-rgb), 0.96);
+  --sidebar-text: rgba(var(--glowui-ink-rgb), 0.88);
+  --sidebar-muted: rgba(var(--glowui-ink-dim-rgb), 0.66);
+  --sidebar-hover: rgba(var(--glowui-blue-rgb), 0.11);
+  --sidebar-active: rgba(var(--glowui-violet-rgb), 0.18);
+  color: var(--sidebar-text);
+}
+
+.sidebar.neo-border-glow .app-version {
+  border-color: rgba(var(--glowui-blue-rgb), 0.2);
+  background: rgba(var(--glowui-panel-deep-rgb), 0.62);
+  color: rgba(var(--glowui-ink-dim-rgb), 0.72);
+}
+
+.sidebar.neo-border-glow .nav-item,
+.sidebar.neo-border-glow .settings-entry,
+.sidebar.neo-border-glow .conversation-item,
+.sidebar.neo-border-glow .history-toggle {
+  color: rgba(var(--glowui-ink-rgb), 0.78);
+}
+
+.sidebar.neo-border-glow .nav-item strong,
+.sidebar.neo-border-glow .settings-entry strong,
+.sidebar.neo-border-glow .conversation-title {
+  color: rgba(var(--glowui-ink-rgb), 0.92);
+}
+
+.sidebar.neo-border-glow .history-header,
+.sidebar.neo-border-glow .history-sort,
+.sidebar.neo-border-glow .conversation-time {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.72);
+}
+
+.sidebar.neo-border-glow .nav-item:hover,
+.sidebar.neo-border-glow .settings-entry:hover,
+.sidebar.neo-border-glow .conversation-item:hover,
+.sidebar.neo-border-glow .history-toggle:hover {
+  background: rgba(var(--glowui-blue-rgb), 0.13);
+  color: var(--glowui-ink-strong);
+}
+
+.sidebar.neo-border-glow .nav-item.active,
+.sidebar.neo-border-glow .conversation-item.active {
+  border: 1px solid rgba(var(--glowui-blue-rgb), 0.30);
+  background:
+    linear-gradient(135deg, rgba(var(--glowui-blue-rgb), 0.36), rgba(var(--glowui-violet-rgb), 0.20));
+  color: var(--glowui-ink-strong);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.08),
+    0 0 18px rgba(var(--glowui-blue-rgb), 0.16);
+}
+
+.sidebar.neo-border-glow .nav-item.active strong,
+.sidebar.neo-border-glow .conversation-item.active .conversation-title {
+  color: var(--glowui-ink-strong);
+}
+
+.sidebar.neo-border-glow .nav-item.active::before,
+.sidebar.neo-border-glow .conversation-item.active::before {
+  background: var(--glowui-blue);
+  box-shadow: 0 0 18px rgba(var(--glowui-blue-rgb), 0.72);
+}
+
+.sidebar.neo-border-glow .nav-logo,
+.sidebar.neo-border-glow .conversation-icon {
+  --glass-icon-gradient: linear-gradient(hsl(253, 90%, 50%), hsl(238, 90%, 50%));
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  color: var(--glowui-ink-strong);
+  perspective: 24em;
+  transform-style: preserve-3d;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sidebar.neo-border-glow #newChatBtn .nav-logo {
+  --glass-icon-gradient: linear-gradient(hsl(283, 90%, 50%), hsl(253, 90%, 50%));
+}
+
+.sidebar.neo-border-glow #scheduleEntryBtn .nav-logo {
+  --glass-icon-gradient: linear-gradient(hsl(223, 90%, 50%), hsl(208, 90%, 50%));
+}
+
+.sidebar.neo-border-glow .settings-entry .nav-logo {
+  --glass-icon-gradient: linear-gradient(hsl(253, 90%, 50%), hsl(208, 90%, 50%));
+}
+
+.sidebar.neo-border-glow .conversation-icon {
+  --glass-icon-gradient: linear-gradient(hsl(283, 90%, 50%), hsl(268, 90%, 50%));
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+}
+
+.sidebar.neo-border-glow .nav-logo::before,
+.sidebar.neo-border-glow .nav-logo::after,
+.sidebar.neo-border-glow .conversation-icon::before,
+.sidebar.neo-border-glow .conversation-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  transition:
+    opacity 0.3s cubic-bezier(0.83, 0, 0.17, 1),
+    transform 0.3s cubic-bezier(0.83, 0, 0.17, 1),
+    box-shadow 0.3s cubic-bezier(0.83, 0, 0.17, 1);
+}
+
+.sidebar.neo-border-glow .conversation-icon::before,
+.sidebar.neo-border-glow .conversation-icon::after {
+  border-radius: 8px;
+}
+
+.sidebar.neo-border-glow .nav-logo::before,
+.sidebar.neo-border-glow .conversation-icon::before {
+  background: var(--glass-icon-gradient);
+  box-shadow: 0.4em -0.4em 0.7em rgba(var(--lens-shadow-rgb), 0.22);
+  transform: rotate(15deg);
+  transform-origin: 100% 100%;
+  opacity: 0.82;
+}
+
+.sidebar.neo-border-glow .nav-logo::after,
+.sidebar.neo-border-glow .conversation-icon::after {
+  border: 1px solid rgba(var(--glowui-glow-rgb), 0.30);
+  background: rgba(var(--glowui-glow-rgb), 0.15);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.10),
+    0 0 18px rgba(var(--glowui-blue-rgb), 0.10);
+  backdrop-filter: blur(0.75em);
+  -webkit-backdrop-filter: blur(0.75em);
+  transform-origin: 80% 50%;
+}
+
+.sidebar.neo-border-glow .nav-logo svg,
+.sidebar.neo-border-glow .conversation-icon svg,
+.sidebar.neo-border-glow .nav-logo img {
+  position: relative;
+  z-index: 2;
+  width: 15px;
+  height: 15px;
+  color: var(--glowui-ink-strong);
+  filter: drop-shadow(0 1px 4px rgba(var(--lens-shadow-rgb), 0.24));
+}
+
+.sidebar.neo-border-glow .conversation-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sidebar.neo-border-glow .nav-item:hover .nav-logo::before,
+.sidebar.neo-border-glow .settings-entry:hover .nav-logo::before,
+.sidebar.neo-border-glow .conversation-item:hover .conversation-icon::before,
+.sidebar.neo-border-glow .nav-item.active .nav-logo::before,
+.sidebar.neo-border-glow .settings-entry.active .nav-logo::before,
+.sidebar.neo-border-glow .conversation-item.active .conversation-icon::before {
+  transform: rotate(25deg) translate3d(-0.34em, -0.34em, 0.5em);
+  opacity: 1;
+}
+
+.sidebar.neo-border-glow .nav-item:hover .nav-logo::after,
+.sidebar.neo-border-glow .settings-entry:hover .nav-logo::after,
+.sidebar.neo-border-glow .conversation-item:hover .conversation-icon::after,
+.sidebar.neo-border-glow .nav-item.active .nav-logo::after,
+.sidebar.neo-border-glow .settings-entry.active .nav-logo::after,
+.sidebar.neo-border-glow .conversation-item.active .conversation-icon::after {
+  transform: translate3d(0, 0, 1.4em);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.16),
+    0 0 22px rgba(var(--glowui-blue-rgb), 0.22);
+}
+
+.sidebar.neo-border-glow .nav-item,
+.sidebar.neo-border-glow .settings-entry {
+  min-height: 48px;
+  gap: 12px;
+}
+
+.sidebar.neo-border-glow .conversation-item {
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto;
+  min-height: 42px;
+  gap: 8px;
+}
+
+.composer.neo-border-glow {
+  --border-radius: 10px;
+  --glow-padding: 32px;
+  --edge-sensitivity: 14;
+  --card-bg: linear-gradient(180deg, rgba(var(--glowui-panel-rgb), 0.92), rgba(var(--glowui-panel-rgb), 0.90));
+  --card-bg-flat: rgba(var(--glowui-panel-rgb), 0.94);
+  width: min(720px, calc(100% - 32px));
+  color: var(--glowui-ink);
+}
+
+.composer.neo-border-glow textarea {
+  color: var(--glowui-ink);
+  background: transparent;
+}
+
+.composer.neo-border-glow textarea::placeholder {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.58);
+}
+
+.composer.neo-border-glow .model-chip,
+.composer.neo-border-glow .attach-button {
+  border-color: rgba(var(--glowui-blue-rgb), 0.18);
+  background: rgba(var(--glowui-panel-rgb), 0.76);
+  color: rgba(var(--glowui-ink-rgb), 0.78);
+}
+
+.composer.neo-border-glow .model-chip:hover,
+.composer.neo-border-glow .attach-button:hover {
+  border-color: rgba(var(--glowui-blue-rgb), 0.34);
+  background: rgba(var(--glowui-panel-rgb), 0.84);
+  color: var(--glowui-ink-strong);
+}
+
+.composer.neo-border-glow .inline-send-status {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.7);
+}
+
+.composer.neo-border-glow .send-button {
+  background: linear-gradient(135deg, var(--glowui-blue), var(--glowui-violet));
+  box-shadow: 0 0 18px rgba(var(--glowui-blue-rgb), 0.42);
+}
+
+.workspace-panel.neo-border-glow {
+  --border-radius: 16px 0 0 16px;
+  --glow-padding: 24px;
+  --card-bg: linear-gradient(180deg, rgba(var(--glowui-panel-rgb), 0.95), rgba(var(--glowui-panel-deep-rgb), 0.92));
+  --card-bg-flat: rgba(var(--glowui-panel-rgb), 0.95);
+  --ink: var(--glowui-ink);
+  --text: var(--glowui-ink);
+  --muted: rgba(var(--glowui-ink-dim-rgb), 0.66);
+  --muted-strong: rgba(var(--glowui-ink-rgb), 0.78);
+  --line: rgba(var(--glowui-blue-rgb), 0.18);
+  --line-strong: rgba(var(--glowui-blue-rgb), 0.32);
+  color: var(--glowui-ink);
+}
+
+.workspace-panel.neo-border-glow .workspace-tabs,
+.workspace-panel.neo-border-glow .task-summary,
+.workspace-panel.neo-border-glow .task-metrics span,
+.workspace-panel.neo-border-glow .task-event,
+.workspace-panel.neo-border-glow .tool-step,
+.workspace-panel.neo-border-glow .empty-panel,
+.workspace-panel.neo-border-glow .artifact-item,
+.workspace-panel.neo-border-glow .file-editor,
+.workspace-panel.neo-border-glow .terminal-form {
+  border-color: rgba(var(--glowui-blue-rgb), 0.16);
+  background: rgba(var(--glowui-panel-rgb), 0.64);
+}
+
+.workspace-panel.neo-border-glow .workspace-tab:hover,
+.workspace-panel.neo-border-glow .workspace-tab.active {
+  background: rgba(var(--glowui-blue-rgb), 0.15);
+  color: var(--glowui-ink-strong);
+  box-shadow: 0 0 16px rgba(var(--glowui-blue-rgb), 0.12);
+}
+
+.sheet-backdrop {
+  background: rgba(var(--glowui-panel-deep-rgb), 0.72);
+  backdrop-filter: blur(28px) saturate(1.12);
+  -webkit-backdrop-filter: blur(28px) saturate(1.12);
+}
+
+.settings-sheet.neo-border-glow {
+  --border-radius: 0;
+  --glow-padding: 18px;
+  --card-bg: linear-gradient(135deg, rgba(var(--glowui-panel-rgb), 0.98), rgba(var(--glowui-panel-rgb), 0.96));
+  --card-bg-flat: rgba(var(--glowui-panel-rgb), 0.98);
+  --ink: var(--glowui-ink);
+  --text: var(--glowui-ink);
+  --muted: rgba(var(--glowui-ink-dim-rgb), 0.76);
+  --muted-strong: rgba(var(--glowui-ink-rgb), 0.86);
+  --line: rgba(var(--glowui-blue-rgb), 0.18);
+  --line-strong: rgba(var(--glowui-blue-rgb), 0.34);
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  color: var(--glowui-ink);
+}
+
+.settings-sheet.neo-border-glow .sheet-header h2 {
+  color: var(--glowui-ink);
+  text-shadow: 0 0 18px rgba(var(--glowui-blue-rgb), 0.20);
+}
+
+.settings-sheet.neo-border-glow .settings-side {
+  border-right-color: rgba(var(--glowui-blue-rgb), 0.22);
+  background:
+    linear-gradient(180deg, rgba(var(--glowui-panel-rgb), 0.98), rgba(var(--glowui-panel-deep-rgb), 0.96));
+  box-shadow: inset -1px 0 0 rgba(var(--glowui-blue-rgb), 0.10);
+}
+
+.settings-sheet.neo-border-glow .settings-return,
+.settings-sheet.neo-border-glow .settings-tab {
+  color: rgba(var(--glowui-ink-rgb), 0.76);
+}
+
+.settings-sheet.neo-border-glow .settings-return:hover,
+.settings-sheet.neo-border-glow .settings-tab:hover {
+  background: rgba(var(--glowui-blue-rgb), 0.12);
+  color: var(--glowui-ink-strong);
+}
+
+.settings-sheet.neo-border-glow .settings-tab.active {
+  border: 1px solid rgba(var(--glowui-blue-rgb), 0.28);
+  background:
+    linear-gradient(135deg, rgba(var(--glowui-blue-rgb), 0.32), rgba(var(--glowui-violet-rgb), 0.18));
+  color: var(--glowui-ink-strong);
+  box-shadow: 0 0 18px rgba(var(--glowui-blue-rgb), 0.13);
+}
+
+.settings-sheet.neo-border-glow .settings-tab-icon {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  padding: 5px;
+  border: 1px solid rgba(var(--glowui-glow-rgb), 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(var(--glowui-glow-rgb), 0.16), rgba(var(--glowui-glow-rgb), 0.06));
+  box-shadow:
+    -4px -4px 10px rgba(var(--glowui-blue-rgb), 0.10),
+    inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.06);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transform: translateZ(0);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.settings-sheet.neo-border-glow .settings-tab:hover .settings-tab-icon,
+.settings-sheet.neo-border-glow .settings-tab.active .settings-tab-icon {
+  border-color: rgba(var(--glowui-blue-rgb), 0.42);
+  box-shadow:
+    -5px -5px 12px rgba(var(--glowui-violet-rgb), 0.16),
+    0 0 18px rgba(var(--glowui-blue-rgb), 0.20),
+    inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.10);
+  transform: translate3d(0, -1px, 0);
+}
+
+.settings-sheet.neo-border-glow .settings-pane {
+  color: var(--glowui-ink);
+}
+
+.settings-sheet.neo-border-glow .pane-group,
+.settings-sheet.neo-border-glow .model-status-tile,
+.settings-sheet.neo-border-glow .route-hint,
+.settings-sheet.neo-border-glow .appearance-preview,
+.settings-sheet.neo-border-glow .appearance-region-card,
+.settings-sheet.neo-border-glow .provider-library-intro,
+.settings-sheet.neo-border-glow .provider-library-card,
+.settings-sheet.neo-border-glow .skill-card,
+.settings-sheet.neo-border-glow .memory-card,
+.settings-sheet.neo-border-glow .archive-item,
+.settings-sheet.neo-border-glow .release-note,
+.settings-sheet.neo-border-glow .stitch-adapt-notes article,
+.settings-sheet.neo-border-glow .update-brand-mark,
+.settings-sheet.neo-border-glow .environment-item,
+.settings-sheet.neo-border-glow .toggle-row {
+  border-color: rgba(var(--glowui-blue-rgb), 0.18);
+  background: rgba(var(--glowui-panel-rgb), 0.70);
+  color: var(--glowui-ink);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.035),
+    0 12px 30px rgba(var(--lens-shadow-rgb), 0.12);
+}
+
+.settings-sheet.neo-border-glow .model-status-tile.primary,
+.settings-sheet.neo-border-glow .release-note.current {
+  border-color: rgba(var(--glowui-blue-rgb), 0.32);
+  background:
+    linear-gradient(135deg, rgba(var(--glowui-blue-rgb), 0.18), rgba(var(--glowui-violet-rgb), 0.10)),
+    rgba(var(--glowui-panel-rgb), 0.76);
+}
+
+.settings-sheet.neo-border-glow .pane-group-title,
+.settings-sheet.neo-border-glow .model-status-tile strong,
+.settings-sheet.neo-border-glow .update-brand-panel h3,
+.settings-sheet.neo-border-glow .update-brand-panel strong,
+.settings-sheet.neo-border-glow .provider-item strong,
+.settings-sheet.neo-border-glow .model-card-head strong,
+.settings-sheet.neo-border-glow .toggle-row strong,
+.settings-sheet.neo-border-glow label {
+  color: var(--glowui-ink);
+}
+
+.settings-sheet.neo-border-glow .model-status-tile span,
+.settings-sheet.neo-border-glow .model-actions-row > span,
+.settings-sheet.neo-border-glow .route-hint,
+.settings-sheet.neo-border-glow .section-subtitle,
+.settings-sheet.neo-border-glow .provider-library-intro span,
+.settings-sheet.neo-border-glow .stitch-adapt-notes span,
+.settings-sheet.neo-border-glow .release-note ul,
+.settings-sheet.neo-border-glow .toggle-row small,
+.settings-sheet.neo-border-glow .model-card-meta,
+.settings-sheet.neo-border-glow .model-card-models,
+.settings-sheet.neo-border-glow .provider-item span,
+.settings-sheet.neo-border-glow .sheet-feedback,
+.settings-sheet.neo-border-glow small {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.78);
+}
+
+.settings-sheet.neo-border-glow input,
+.settings-sheet.neo-border-glow select,
+.settings-sheet.neo-border-glow textarea {
+  border-color: rgba(var(--glowui-blue-rgb), 0.24);
+  background: rgba(var(--glowui-panel-deep-rgb), 0.76);
+  color: var(--glowui-ink);
+  box-shadow: inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.025);
+}
+
+.settings-sheet.neo-border-glow input::placeholder,
+.settings-sheet.neo-border-glow textarea::placeholder {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.52);
+}
+
+.settings-sheet.neo-border-glow input:focus,
+.settings-sheet.neo-border-glow select:focus,
+.settings-sheet.neo-border-glow textarea:focus {
+  border-color: rgba(var(--glowui-blue-rgb), 0.58);
+  box-shadow: 0 0 0 3px rgba(var(--glowui-blue-rgb), 0.14);
+}
+
+.settings-sheet.neo-border-glow .primary-button {
+  background: linear-gradient(135deg, var(--glowui-blue), var(--glowui-violet));
+  color: var(--glowui-ink-strong);
+  box-shadow: 0 0 18px rgba(var(--glowui-blue-rgb), 0.32);
+}
+
+.settings-sheet.neo-border-glow .ghost-button {
+  border-color: rgba(var(--glowui-blue-rgb), 0.22);
+  background: rgba(var(--glowui-panel-rgb), 0.68);
+  color: rgba(var(--glowui-ink-rgb), 0.86);
+}
+
+.settings-sheet.neo-border-glow .ghost-button:hover {
+  border-color: rgba(var(--glowui-blue-rgb), 0.38);
+  background: rgba(var(--glowui-panel-rgb), 0.84);
+  color: var(--glowui-ink-strong);
+}
+
+.settings-sheet.neo-border-glow .provider-item,
+.settings-sheet.neo-border-glow .model-card,
+.settings-sheet.neo-border-glow .skill-card,
+.settings-sheet.neo-border-glow .memory-item,
+.settings-sheet.neo-border-glow .archive-item,
+.settings-sheet.neo-border-glow .environment-item,
+.settings-sheet.neo-border-glow .release-note {
+  background: rgba(var(--glowui-panel-rgb), 0.70);
+  color: var(--glowui-ink);
+}
+
+.settings-sheet.neo-border-glow .provider-item:hover,
+.settings-sheet.neo-border-glow .model-card:hover,
+.settings-sheet.neo-border-glow .skill-card:hover,
+.settings-sheet.neo-border-glow .memory-item:hover,
+.settings-sheet.neo-border-glow .archive-item:hover {
+  border-color: rgba(var(--glowui-blue-rgb), 0.34);
+  background: rgba(var(--glowui-panel-rgb), 0.84);
+}
+
+.settings-sheet.neo-border-glow .key-state {
+  background: rgba(34, 197, 94, 0.13);
+  color: #79E8A2;
+}
+
+.settings-sheet.neo-border-glow .key-state.missing {
+  background: rgba(248, 113, 113, 0.13);
+  color: #FDA4A4;
+}
+
+.settings-sheet.neo-border-glow .update-progress-panel.visible {
+  border-color: rgba(var(--glowui-blue-rgb), 0.24);
+  background: rgba(var(--glowui-panel-rgb), 0.76);
+}
+
+.settings-sheet.neo-border-glow .update-progress-track {
+  background: rgba(var(--glowui-panel-deep-rgb), 0.82);
+}
+
+.settings-sheet.neo-border-glow .update-progress-fill {
+  background: linear-gradient(90deg, var(--glowui-cyan), var(--glowui-violet));
+}
+
+/* ── 全局暗色清理：把零散浅色组件统一到未来感主题 ───────────── */
+
+body {
+  --bg: var(--glowui-panel-deep);
+  --surface: rgba(var(--glowui-panel-rgb), 0.76);
+  --surface-soft: rgba(var(--glowui-blue-rgb), 0.12);
+  --surface-hover: rgba(var(--glowui-blue-rgb), 0.18);
+  --glass-surface: rgba(var(--glowui-panel-rgb), 0.78);
+  --glass-surface-strong: rgba(var(--glowui-panel-rgb), 0.92);
+  --ink: var(--glowui-ink);
+  --text: var(--glowui-ink);
+  --muted: rgba(var(--glowui-ink-dim-rgb), 0.76);
+  --muted-strong: rgba(var(--glowui-ink-rgb), 0.86);
+  --line: rgba(var(--glowui-blue-rgb), 0.18);
+  --line-strong: rgba(var(--glowui-blue-rgb), 0.34);
+  color: var(--ink);
+}
+
+input,
+select,
+textarea {
+  border-color: rgba(var(--glowui-blue-rgb), 0.24);
+  background: rgba(var(--glowui-panel-deep-rgb), 0.76);
+  color: var(--glowui-ink);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.54);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(var(--glowui-blue-rgb), 0.58);
+  box-shadow: 0 0 0 3px rgba(var(--glowui-blue-rgb), 0.14);
+}
+
+.message.user .bubble {
+  border: 1px solid rgba(var(--glowui-blue-rgb), 0.30);
+  background:
+    linear-gradient(135deg, rgba(var(--glowui-blue-rgb), 0.30), rgba(var(--glowui-violet-rgb), 0.20));
+  color: var(--glowui-ink-strong);
+  box-shadow: 0 0 18px rgba(var(--glowui-blue-rgb), 0.13);
+}
+
+.message.assistant .bubble {
+  color: var(--glowui-ink);
+}
+
+.message.assistant .bubble code {
+  background: rgba(var(--glowui-blue-rgb), 0.14);
+  color: var(--glowui-ink);
+}
+
+.message.assistant .bubble pre,
+.tool-step pre,
+.terminal-output,
+.environment-output,
+.environment-command {
+  border-color: rgba(var(--glowui-cyan-rgb), 0.18);
+  background: rgba(var(--glowui-panel-deep-rgb), 0.88);
+  color: var(--glowui-ink);
+}
+
+.message.error .bubble {
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  background: rgba(127, 29, 29, 0.28);
+  color: #FECACA;
+}
+
+.message-attachment-card,
+.message-reference-card,
+.quote-chip,
+.attachment-chip,
+.template-button,
+.task-summary,
+.task-metrics span,
+.task-event,
+.tool-step,
+.empty-panel,
+.artifact-item,
+.file-editor,
+.terminal-form,
+.office-task-mini,
+.office-task-step,
+.model-card,
+.provider-item,
+.provider-library-card,
+.skill-card,
+.archive-item,
+.memory-item,
+.memory-stat,
+.memory-strategy-panel,
+.memory-fields,
+.environment-item,
+.release-note,
+.toggle-row,
+.stitch-adapt-notes article,
+.appearance-region-card,
+.pane-group,
+.model-status-tile,
+.route-hint {
+  border-color: rgba(var(--glowui-blue-rgb), 0.18);
+  background: rgba(var(--glowui-panel-rgb), 0.70);
+  color: var(--glowui-ink);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.03),
+    0 10px 28px rgba(var(--lens-shadow-rgb), 0.12);
+}
+
+.message-attachment-card.image-card,
+.attachment-chip.image-chip,
+.attachment-chip.doc-chip,
+.attachment-chip.pdf-chip,
+.attachment-chip.sheet-chip,
+.attachment-chip.ppt-chip,
+.model-card.active,
+.provider-item.active,
+.provider-library-card.active,
+.skill-card.active,
+.skill-card.caution.active,
+.release-note.current,
+.memory-item.pending {
+  border-color: rgba(var(--glowui-blue-rgb), 0.32);
+  background:
+    linear-gradient(135deg, rgba(var(--glowui-blue-rgb), 0.18), rgba(var(--glowui-violet-rgb), 0.10)),
+    rgba(var(--glowui-panel-rgb), 0.76);
+}
+
+.message-attachment-thumb,
+.attachment-chip .chip-thumb,
+.avatar-upload-btn,
+.update-brand-mark {
+  border-color: rgba(var(--glowui-blue-rgb), 0.20);
+  background: rgba(var(--glowui-panel-deep-rgb), 0.82);
+}
+
+.message-attachment-main strong,
+.message-reference-card span,
+.quote-chip strong,
+.attachment-chip .chip-name,
+.artifact-main strong,
+.file-editor-header strong,
+.file-item span,
+.provider-item strong,
+.provider-library-head strong,
+.skill-card strong,
+.archive-title,
+.memory-main strong,
+.memory-strategy-panel strong,
+.memory-stat strong,
+.office-task-step strong,
+.office-task-mini-head strong,
+.release-note strong,
+.toggle-row strong {
+  color: var(--glowui-ink);
+}
+
+.message-attachment-main small,
+.message-attachment-main em,
+.message-reference-card small,
+.quote-chip em,
+.attachment-chip .chip-size,
+.artifact-main small,
+.artifact-main em,
+.file-editor small,
+.provider-item span,
+.provider-item-url,
+.provider-library-head span,
+.provider-library-models,
+.provider-library-card p,
+.provider-library-url,
+.skill-card p,
+.archive-empty,
+.memory-meta,
+.memory-main p,
+.memory-strategy-panel span,
+.office-task-step small,
+.office-task-mini-head small,
+.release-note time,
+.release-note ul,
+.toggle-row small,
+.empty-panel,
+.empty-panel small,
+.panel-mini-title {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.78);
+}
+
+.file-item:hover,
+.picker-item:hover,
+.template-button:hover,
+.provider-item:hover,
+.provider-library-card:hover,
+.skill-card:hover,
+.archive-item:hover {
+  border-color: rgba(var(--glowui-blue-rgb), 0.32);
+  background: rgba(var(--glowui-panel-rgb), 0.84);
+  color: var(--glowui-ink-strong);
+}
+
+.model-popover,
+.status-toast,
+.environment-modal {
+  border-color: rgba(var(--glowui-blue-rgb), 0.42);
+  background:
+    linear-gradient(135deg, rgba(var(--glowui-panel-rgb), 0.98), rgba(var(--glowui-panel-rgb), 0.96));
+  color: var(--glowui-ink);
+  box-shadow:
+    0 0 0 1px rgba(var(--glowui-blue-rgb), 0.22),
+    0 0 42px rgba(var(--glowui-blue-rgb), 0.16),
+    0 24px 70px rgba(var(--lens-shadow-rgb), 0.42);
+}
+
+.modal-backdrop {
+  background: rgba(var(--glowui-panel-deep-rgb), 0.72);
+  backdrop-filter: blur(28px) saturate(1.12);
+  -webkit-backdrop-filter: blur(28px) saturate(1.12);
+}
+
+.picker-item,
+.picker-back,
+.modal-header,
+.modal-actions {
+  color: rgba(var(--glowui-ink-rgb), 0.82);
+}
+
+.picker-item.active {
+  border-color: rgba(var(--glowui-blue-rgb), 0.30);
+  background: rgba(var(--glowui-blue-rgb), 0.18);
+  color: var(--glowui-ink-strong);
+}
+
+.status-toast small,
+.picker-meta,
+.environment-modal p,
+.environment-detail {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.78);
+}
+
+.ghost-button,
+.primary-button,
+.schedule-btn,
+.message-quote-btn,
+.conv-archive-btn,
+.conv-quote-btn,
+.artifact-action,
+.chip-remove {
+  box-shadow: none;
+}
+
+.ghost-button,
+.schedule-btn,
+.message-quote-btn,
+.conv-archive-btn,
+.conv-quote-btn,
+.artifact-action {
+  border-color: rgba(var(--glowui-blue-rgb), 0.22);
+  background: rgba(var(--glowui-panel-rgb), 0.68);
+  color: rgba(var(--glowui-ink-rgb), 0.86);
+}
+
+.ghost-button:hover,
+.schedule-btn:hover,
+.message-quote-btn:hover,
+.conv-archive-btn:hover,
+.conv-quote-btn:hover,
+.artifact-action:hover {
+  border-color: rgba(var(--glowui-blue-rgb), 0.38);
+  background: rgba(var(--glowui-panel-rgb), 0.84);
+  color: var(--glowui-ink-strong);
+}
+
+.primary-button {
+  background: linear-gradient(135deg, var(--glowui-blue), var(--glowui-violet));
+  color: var(--glowui-ink-strong);
+  box-shadow: 0 0 18px rgba(var(--glowui-blue-rgb), 0.30);
+}
+
+.key-state,
+.status-pill.ok,
+.office-task-step.complete span {
+  background: rgba(34, 197, 94, 0.13);
+  color: #79E8A2;
+}
+
+.key-state.missing,
+.status-pill.missing,
+.office-task-step.failed span {
+  background: rgba(248, 113, 113, 0.13);
+  color: #FDA4A4;
+}
+
+.status-pill.outdated {
+  background: rgba(251, 191, 36, 0.13);
+  color: #FCD34D;
+}
+
+.workspace-card.drop-active {
+  border-color: rgba(var(--glowui-blue-rgb), 0.64);
+  background: rgba(var(--glowui-blue-rgb), 0.08);
+  outline-color: rgba(var(--glowui-blue-rgb), 0.48);
+}
+
+.workspace-card.drop-active::after {
+  background: rgba(var(--glowui-panel-deep-rgb), 0.84);
+  color: var(--glowui-ink);
+}
+
+.range-setting input[type="range"] {
+  accent-color: var(--glowui-blue);
+}
+
+.color-setting input[type="color"] {
+  border-color: rgba(var(--glowui-blue-rgb), 0.24);
+  background: rgba(var(--glowui-panel-deep-rgb), 0.76);
+}
+
+.appearance-preview {
+  border-color: rgba(var(--glowui-blue-rgb), 0.18);
+  background:
+    radial-gradient(circle at 24% 18%, rgba(var(--glowui-blue-rgb), 0.22), transparent 34%),
+    linear-gradient(135deg, rgba(var(--glowui-panel-rgb), 0.92), rgba(var(--glowui-panel-rgb), 0.88));
+}
+
+.appearance-preview-gap {
+  border-color: rgba(var(--glowui-blue-rgb), 0.10);
+  background: rgba(var(--glowui-blue-rgb), 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neo-border-glow::before,
+  .neo-border-glow::after,
+  .neo-border-glow > .edge-light {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ambient-motion {
     display: none;
@@ -4371,8 +5547,8 @@ body.resizing .resize-handle::after {
   background: rgba(255,255,255,0.75);
   outline: none;
 }
-.petdex-search-row input:focus { border-color: var(--accent, #6366f1); }
-.petdex-search-row select:focus { border-color: var(--accent, #6366f1); }
+.petdex-search-row input:focus { border-color: var(--accent, var(--glowui-violet)); }
+.petdex-search-row select:focus { border-color: var(--accent, var(--glowui-violet)); }
 .petdex-status {
   font-size: 12px;
   color: var(--text-muted, #888);
@@ -4400,7 +5576,7 @@ body.resizing .resize-handle::after {
   overflow: hidden;
 }
 .petdex-card:hover { background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.3); }
-.petdex-card.selected { border-color: var(--accent, #6366f1); background: rgba(99,102,241,0.12); }
+.petdex-card.selected { border-color: var(--accent, var(--glowui-violet)); background: rgba(99,102,241,0.12); }
 .petdex-card canvas {
   image-rendering: pixelated;
   border-radius: 4px;
@@ -4475,12 +5651,1851 @@ body.resizing .resize-handle::after {
 }
 .petdex-preview-states .ghost-button.active {
   color: #fff;
-  background: var(--accent, #6366f1);
-  border-color: var(--accent, #6366f1);
+  background: var(--accent, var(--glowui-violet));
+  border-color: var(--accent, var(--glowui-violet));
 }
 .petdex-preview-actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
+}
+
+/* ── 最终主题护栏：覆盖深层设置与左侧选中态残留 ───────────── */
+
+.sidebar.neo-border-glow .nav-item:hover,
+.sidebar.neo-border-glow .settings-entry:hover,
+.sidebar.neo-border-glow .conversation-item:hover {
+  background-color: rgba(var(--glowui-blue-rgb), 0.13) !important;
+  background-image: none !important;
+  color: var(--glowui-ink-strong) !important;
+}
+
+.sidebar.neo-border-glow .nav-item.active,
+.sidebar.neo-border-glow .conversation-item.active {
+  border-color: rgba(var(--glowui-blue-rgb), 0.34) !important;
+  background-color: rgba(var(--glowui-panel-rgb), 0.78) !important;
+  background-image: linear-gradient(135deg, rgba(var(--glowui-blue-rgb), 0.36), rgba(var(--glowui-violet-rgb), 0.20)) !important;
+  color: var(--glowui-ink-strong) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.08),
+    0 0 18px rgba(var(--glowui-blue-rgb), 0.16) !important;
+}
+
+.sidebar.neo-border-glow .nav-item.active strong,
+.sidebar.neo-border-glow .conversation-item.active .conversation-title,
+.sidebar.neo-border-glow .settings-entry strong {
+  color: var(--glowui-ink-strong) !important;
+}
+
+.sidebar.neo-border-glow .conversation-item.active .conversation-time {
+  color: rgba(var(--glowui-ink-rgb), 0.80) !important;
+}
+
+.petdex-current,
+.petdex-search-row input,
+.petdex-search-row select,
+.petdex-card,
+.petdex-preview-card {
+  border-color: rgba(var(--glowui-blue-rgb), 0.20);
+  background:
+    radial-gradient(circle at 26% 16%, rgba(var(--glowui-blue-rgb), 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(var(--glowui-panel-rgb), 0.92), rgba(var(--glowui-panel-rgb), 0.86));
+  color: var(--glowui-ink);
+}
+
+#petdexCurrentCanvas,
+#petdexPreviewCanvas,
+.petdex-card canvas {
+  border: 1px solid rgba(var(--glowui-blue-rgb), 0.18);
+  background: rgba(var(--glowui-panel-deep-rgb), 0.72);
+  box-shadow: inset 0 0 18px rgba(var(--glowui-blue-rgb), 0.08);
+}
+
+.petdex-slug-label,
+.petdex-status,
+.petdex-card-meta,
+.petdex-pagination,
+.petdex-preview-info,
+.petdex-preview-info span {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.78);
+}
+
+.petdex-current-info strong,
+.petdex-card-name,
+.petdex-preview-info strong {
+  color: var(--glowui-ink);
+}
+
+.petdex-search-row input::placeholder {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.58);
+}
+
+.petdex-search-row input:focus,
+.petdex-search-row select:focus {
+  border-color: rgba(var(--glowui-blue-rgb), 0.56);
+  box-shadow: 0 0 0 3px rgba(var(--glowui-blue-rgb), 0.14);
+}
+
+.petdex-card:hover {
+  border-color: rgba(var(--glowui-blue-rgb), 0.36);
+  background:
+    radial-gradient(circle at 26% 16%, rgba(var(--glowui-blue-rgb), 0.22), transparent 34%),
+    linear-gradient(135deg, rgba(var(--glowui-panel-rgb), 0.96), rgba(var(--glowui-panel-rgb), 0.90));
+}
+
+.petdex-card.selected,
+.petdex-preview-states .ghost-button.active {
+  border-color: rgba(var(--glowui-blue-rgb), 0.58);
+  background: linear-gradient(135deg, rgba(var(--glowui-blue-rgb), 0.32), rgba(var(--glowui-violet-rgb), 0.24));
+  color: var(--glowui-ink-strong);
+  box-shadow: 0 0 18px rgba(var(--glowui-blue-rgb), 0.18);
+}
+
+.petdex-preview-overlay {
+  background: rgba(var(--glowui-panel-deep-rgb), 0.74);
+  backdrop-filter: blur(24px) saturate(1.08);
+  -webkit-backdrop-filter: blur(24px) saturate(1.08);
+}
+
+.petdex-preview-card {
+  border: 1px solid rgba(var(--glowui-blue-rgb), 0.42);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(var(--glowui-blue-rgb), 0.20),
+    0 0 42px rgba(var(--glowui-blue-rgb), 0.16),
+    0 24px 70px rgba(var(--lens-shadow-rgb), 0.42);
+}
+
+.settings-sheet.neo-border-glow .settings-tab-icon {
+  background-color: rgba(var(--glowui-panel-rgb), 0.66) !important;
+  background-image:
+    linear-gradient(135deg, rgba(var(--glowui-glow-rgb), 0.18), rgba(var(--glowui-glow-rgb), 0.06)),
+    linear-gradient(145deg, rgba(var(--glowui-blue-rgb), 0.36), rgba(var(--glowui-violet-rgb), 0.22)) !important;
+  color: var(--glowui-ink-strong) !important;
+  stroke: currentColor;
+  filter: drop-shadow(0 1px 5px rgba(var(--lens-shadow-rgb), 0.28));
+}
+
+.settings-sheet.neo-border-glow .settings-tab:hover .settings-tab-icon,
+.settings-sheet.neo-border-glow .settings-tab.active .settings-tab-icon {
+  background-color: rgba(var(--glowui-panel-rgb), 0.66) !important;
+  background-image:
+    linear-gradient(135deg, rgba(var(--glowui-glow-rgb), 0.20), rgba(var(--glowui-glow-rgb), 0.07)),
+    linear-gradient(145deg, rgba(var(--glowui-blue-rgb), 0.48), rgba(var(--glowui-violet-rgb), 0.34)) !important;
+}
+
+.settings-sheet.neo-border-glow .external-paths-box,
+.settings-sheet.neo-border-glow .skill-library-intro {
+  border-color: rgba(var(--glowui-blue-rgb), 0.20) !important;
+  background-color: rgba(var(--glowui-panel-rgb), 0.82) !important;
+  background-image:
+    radial-gradient(circle at 24% 18%, rgba(var(--glowui-blue-rgb), 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(var(--glowui-panel-rgb), 0.92), rgba(var(--glowui-panel-rgb), 0.86)) !important;
+  color: var(--glowui-ink) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--glowui-glow-rgb), 0.04);
+}
+
+.settings-sheet.neo-border-glow .skill-library-intro strong,
+.settings-sheet.neo-border-glow .external-paths-box label {
+  color: var(--glowui-ink) !important;
+}
+
+.settings-sheet.neo-border-glow .skill-library-intro span {
+  color: rgba(var(--glowui-ink-dim-rgb), 0.78) !important;
+}
+
+.settings-sheet.neo-border-glow .appearance-preview-zone {
+  border-color: rgba(var(--glowui-blue-rgb), 0.10);
+  background-color: rgba(var(--glowui-panel-rgb), 0.72) !important;
+}
+
+.settings-sheet.neo-border-glow .appearance-preview-left {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(var(--glowui-blue-rgb), 0.22), transparent 38%),
+    linear-gradient(135deg, rgba(var(--glowui-panel-rgb), 0.92), rgba(var(--glowui-panel-rgb), 0.84)) !important;
+}
+
+.settings-sheet.neo-border-glow .appearance-preview-center {
+  background-image:
+    radial-gradient(circle at 50% 18%, rgba(var(--glowui-violet-rgb), 0.24), transparent 34%),
+    linear-gradient(135deg, rgba(var(--glowui-panel-deep-rgb), 0.96), rgba(var(--glowui-panel-rgb), 0.88)) !important;
+}
+
+.settings-sheet.neo-border-glow .appearance-preview-right {
+  background-image:
+    radial-gradient(circle at 74% 22%, rgba(var(--glowui-blue-rgb), 0.20), transparent 34%),
+    linear-gradient(135deg, rgba(var(--glowui-panel-rgb), 0.90), rgba(var(--glowui-panel-deep-rgb), 0.86)) !important;
+}
+
+#sidebar.neo-border-glow .nav-item.active,
+#sidebar.neo-border-glow .conversation-item.active {
+  background:
+    linear-gradient(135deg, rgba(var(--glowui-blue-rgb), 0.36), rgba(var(--glowui-violet-rgb), 0.20)),
+    linear-gradient(0deg, rgba(var(--glowui-panel-rgb), 0.88), rgba(var(--glowui-panel-rgb), 0.88)) !important;
+  color: var(--glowui-ink-strong) !important;
+}
+
+#sidebar.neo-border-glow .nav-item.active strong,
+#sidebar.neo-border-glow .conversation-item.active .conversation-title,
+#sidebar.neo-border-glow .conversation-item.active .conversation-time {
+  color: var(--glowui-ink-strong) !important;
+}
+
+/* ── Living Assistant Lens：图三沉浸式主界面 ───────────────────── */
+
+body.neo-lens-mode {
+  --lens-stage-safe-area: 40px;
+  --lens-stage-width: min(800px, calc(100vw - (var(--lens-stage-safe-area) * 2)));
+  --lens-stage-height: min(600px, calc(100vh - (var(--lens-stage-safe-area) * 2)));
+
+  /* 主题色板（深色默认值；浅色见 body.neo-lens-mode.lens-theme-light） */
+  --lens-bg: #020406;
+  --lens-coral: #ff8a70;
+  --lens-coral-strong: #ff6f58;
+  --lens-jade: #59f0ca;
+  --lens-blue: #6DB5FF;
+  --lens-primary-a: #54E2D3;
+  --lens-primary-b: #4D8CFF;
+  --lens-ink: #f4f7f8;
+  --lens-ink-strong: #FFFFFF;
+  --lens-glow-hsl: 171deg 86% 71%;
+
+  /* RGB 三元组：供 rgba(var(--…-rgb), α) 按透明度复用 */
+  --lens-jade-rgb: 89, 240, 202;          /* 玉绿主色 */
+  --lens-jade-bright-rgb: 142, 250, 232;  /* 玉绿高亮（描边/辉光） */
+  --lens-coral-rgb: 255, 138, 112;        /* 珊瑚副色 */
+  --lens-blue-rgb: 109, 181, 255;         /* 蓝色点缀 */
+  --lens-glow-rgb: 255, 255, 255;         /* 玻璃内高光 */
+  --lens-ink-rgb: 243, 249, 248;          /* 正文文字 */
+  --lens-ink-dim-rgb: 213, 227, 226;      /* 次级文字 */
+  --lens-line-rgb: 219, 240, 237;         /* 描边 */
+  --lens-panel-rgb: 10, 14, 16;           /* 玻璃面板底色 */
+  --lens-panel-deep-rgb: 3, 6, 10;        /* 更深的面板/渐变端点 */
+  --lens-panel-blue-rgb: 9, 13, 22;       /* 带蓝调的面板渐变 */
+  --lens-shadow-rgb: 0, 0, 0;             /* 投影 */
+
+  --lens-jade-soft: rgba(var(--lens-jade-rgb), 0.28);
+  --lens-muted: rgba(var(--lens-ink-dim-rgb), 0.62);
+  --lens-panel: rgba(var(--lens-panel-rgb), 0.58);
+  --lens-panel-strong: rgba(var(--lens-panel-rgb), 0.78);
+  --lens-line: rgba(var(--lens-line-rgb), 0.14);
+  --lens-line-strong: rgba(var(--lens-line-rgb), 0.32);
+  --lens-shadow: 0 28px 88px rgba(var(--lens-shadow-rgb), 0.58);
+
+  /* glow UI（neo-border-glow 卡片体系：侧栏/设置/工作台/输入框）蓝紫色板 */
+  --glowui-blue: #5B8CFF;
+  --glowui-violet: #8B5CF6;
+  --glowui-cyan: #38BDF8;
+  --glowui-ink: #F3F7FF;
+  --glowui-ink-strong: #FFFFFF;
+  --glowui-panel-deep: #04060E;
+  --glowui-glow-hsl: 216deg 100% 68%;
+  --glowui-blue-rgb: 96, 150, 255;
+  --glowui-violet-rgb: 124, 70, 245;
+  --glowui-cyan-rgb: 56, 189, 248;
+  --glowui-glow-rgb: 255, 255, 255;
+  --glowui-ink-rgb: 228, 236, 252;
+  --glowui-ink-dim-rgb: 168, 181, 212;
+  --glowui-panel-rgb: 10, 14, 30;
+  --glowui-panel-deep-rgb: 4, 7, 17;
+
+  background: var(--lens-bg);
+  color: var(--lens-ink);
+}
+
+html.desktop-mode body.neo-lens-mode {
+  background: transparent;
+}
+
+/* 仅浏览器里跑的 Windows 保留深色底；桌面端（Electron 透明窗口）和 mac 一样透出桌面 */
+html.platform-win:not(.desktop-mode) body.neo-lens-mode {
+  background: var(--lens-bg);
+}
+
+body.neo-lens-mode::before,
+html.platform-win body.neo-lens-mode::before {
+  display: none;
+}
+
+body.neo-lens-mode::after {
+  display: none;
+}
+
+body.neo-lens-mode .ambient-glow,
+body.neo-lens-mode .ambient-motion,
+body.neo-lens-mode .laser-flow-stage,
+body.neo-lens-mode .edge-light,
+body.neo-lens-mode .window-titlebar .workspace-toggle {
+  display: none !important;
+}
+
+body.neo-lens-mode .neo-brand-mark {
+  display: none !important;
+}
+
+.neo-brand-mark {
+  position: fixed;
+  top: 24px;
+  left: 26px;
+  z-index: 45;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: rgba(var(--lens-ink-rgb), 0.86);
+  font-size: 30px;
+  font-weight: 760;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  -webkit-app-region: drag;
+  user-select: none;
+  text-shadow: 0 0 18px rgba(var(--lens-glow-rgb), 0.12);
+}
+
+.neo-brand-mark i {
+  width: 6px;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--lens-coral);
+  box-shadow: 0 0 14px rgba(var(--lens-coral-rgb), 0.88);
+}
+
+.neo-capability-rail {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  width: 54px;
+  min-height: 58px;
+  padding: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--lens-line-rgb), 0.10);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 72% 50%, rgba(var(--lens-jade-rgb), 0.18), transparent 34%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.09), rgba(var(--lens-glow-rgb), 0.025)),
+    rgba(var(--lens-panel-rgb), 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.08),
+    0 10px 32px rgba(var(--lens-shadow-rgb), 0.20);
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-app-region: no-drag;
+  transition: width 240ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.neo-capability-rail::before {
+  content: "";
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background:
+    radial-gradient(circle at 50% 18%, rgba(var(--lens-glow-rgb), 0.78) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 50% 50%, rgba(var(--lens-jade-bright-rgb), 0.70) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 50% 82%, rgba(var(--lens-coral-rgb), 0.62) 0 2px, transparent 2.5px);
+  filter: drop-shadow(0 0 12px rgba(var(--lens-jade-rgb), 0.28));
+  opacity: 0.78;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 180ms ease;
+}
+
+.neo-capability-rail:hover,
+.neo-capability-rail:focus-within {
+  width: 214px;
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.24);
+  background:
+    radial-gradient(circle at 82% 50%, rgba(var(--lens-jade-rgb), 0.15), transparent 38%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.13), rgba(var(--lens-glow-rgb), 0.035)),
+    rgba(var(--lens-panel-rgb), 0.46);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.11),
+    0 0 22px rgba(var(--lens-jade-rgb), 0.08),
+    0 14px 38px rgba(var(--lens-shadow-rgb), 0.26);
+}
+
+.neo-capability-rail:hover::before,
+.neo-capability-rail:focus-within::before {
+  opacity: 0;
+  transform: translateY(-50%) scale(0.72);
+}
+
+.lens-action-button {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(var(--lens-line-rgb), 0.16);
+  border-radius: 50%;
+  background:
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.15), rgba(var(--lens-glow-rgb), 0.035)),
+    rgba(var(--lens-panel-rgb), 0.52);
+  color: rgba(var(--lens-ink-rgb), 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.14),
+    0 10px 30px rgba(var(--lens-shadow-rgb), 0.28);
+  backdrop-filter: blur(22px) saturate(1.18);
+  -webkit-backdrop-filter: blur(22px) saturate(1.18);
+  transition: transform 160ms ease, border-color 160ms ease, color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  outline: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(18px) scale(0.76);
+}
+
+.neo-capability-rail:hover .lens-action-button,
+.neo-capability-rail:focus-within .lens-action-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+.lens-action-button svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lens-action-button:hover,
+.lens-action-button:focus-visible,
+.lens-action-button.active,
+body:not(.sidebar-closed) #lensHistoryBtn,
+body:not(.workspace-closed) #lensWorkspaceBtn {
+  transform: translateY(-1px) scale(1);
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.46);
+  color: var(--lens-ink-strong);
+  background:
+    radial-gradient(circle at 42% 18%, rgba(var(--lens-jade-rgb), 0.18), transparent 45%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.22), rgba(var(--lens-glow-rgb), 0.06)),
+    rgba(var(--lens-panel-rgb), 0.68);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.18),
+    0 0 24px rgba(var(--lens-jade-rgb), 0.12),
+    0 13px 34px rgba(var(--lens-shadow-rgb), 0.34);
+}
+
+body.neo-lens-mode .window-titlebar {
+  height: 64px;
+  min-height: 64px;
+  background: transparent;
+  -webkit-app-region: drag;
+  z-index: 40;
+}
+
+body.neo-lens-mode .app-shell {
+  position: relative;
+  z-index: 5;
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+body.neo-lens-mode .main {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  padding: 0;
+  color: var(--lens-ink);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.neo-lens-mode .workspace-card {
+  --stage-pointer-x: 50%;
+  --stage-pointer-y: 50%;
+  --stage-pointer-alpha: 0.055;
+  --stage-parallax-x: 0px;
+  --stage-parallax-y: 0px;
+  --stage-parallax-inverse-x: 0px;
+  --stage-parallax-inverse-y: 0px;
+  --stage-orbit-x: 0px;
+  --stage-orbit-y: 0px;
+  --stage-shift-x: 0px;
+  --stage-shift-y: 0px;
+  --stage-tilt-x: 0deg;
+  --stage-tilt-y: 0deg;
+  position: relative;
+  width: var(--lens-stage-width);
+  height: var(--lens-stage-height);
+  min-height: 0;
+  border: 1px solid rgba(var(--lens-jade-rgb), 0.08);
+  border-radius: clamp(36px, 7vmin, 64px);
+  background:
+    radial-gradient(ellipse 24% 12% at var(--stage-pointer-x) var(--stage-pointer-y), rgba(var(--lens-jade-rgb), var(--stage-pointer-alpha)), transparent 66%),
+    radial-gradient(ellipse 36% 26% at 13% 76%, rgba(var(--lens-coral-rgb), 0.12), transparent 68%),
+    radial-gradient(ellipse 42% 28% at 86% 78%, rgba(var(--lens-jade-rgb), 0.105), transparent 70%),
+    linear-gradient(180deg, rgba(var(--lens-panel-blue-rgb), 0.92), rgba(var(--lens-panel-deep-rgb), 0.74));
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-jade-bright-rgb), 0.055),
+    inset 0 -1px 0 rgba(var(--lens-jade-rgb), 0.035),
+    0 0 0 1px rgba(var(--lens-panel-deep-rgb), 0.28),
+    0 0 42px rgba(var(--lens-jade-rgb), 0.08);
+  overflow: hidden;
+  isolation: isolate;
+  transform:
+    perspective(1100px)
+    translate3d(var(--stage-shift-x), var(--stage-shift-y), 0)
+    rotateX(var(--stage-tilt-y))
+    rotateY(var(--stage-tilt-x));
+  transform-origin: center;
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: box-shadow 180ms ease;
+}
+
+body.neo-lens-mode .workspace-card::before,
+body.neo-lens-mode .workspace-card::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+body.neo-lens-mode .workspace-card::before {
+  inset: -28px;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 21% 11% at var(--stage-pointer-x) var(--stage-pointer-y), rgba(var(--lens-jade-bright-rgb), 0.075), transparent 70%),
+    linear-gradient(100deg, rgba(var(--lens-coral-rgb), 0.10), transparent 38%, rgba(var(--lens-jade-rgb), 0.12)),
+    linear-gradient(180deg, rgba(var(--lens-glow-rgb), 0.07), transparent 38%, rgba(var(--lens-panel-deep-rgb), 0.40));
+  background-size: 112% 112%, 126% 126%, 100% 100%;
+  mix-blend-mode: screen;
+  opacity: 0.72;
+  transform: translate3d(var(--stage-parallax-x), var(--stage-parallax-y), 0) scale(1.035);
+  will-change: transform, background-position;
+  animation: lensBackdropDrift 18s ease-in-out infinite alternate;
+}
+
+body.neo-lens-mode .workspace-card::after {
+  inset: -22px;
+  z-index: 1;
+  background:
+    radial-gradient(circle at 50% 40%, transparent 0 28%, rgba(var(--lens-panel-deep-rgb), 0.14) 52%, rgba(var(--lens-panel-deep-rgb), 0.54) 100%),
+    linear-gradient(90deg, rgba(var(--lens-panel-deep-rgb), 0.42), transparent 30%, transparent 70%, rgba(var(--lens-panel-deep-rgb), 0.42));
+  transform: translate3d(var(--stage-parallax-inverse-x), var(--stage-parallax-inverse-y), 0) scale(1.02);
+  will-change: transform, opacity;
+  animation: lensVignetteBreathe 8s ease-in-out infinite;
+}
+
+body.neo-lens-mode .workspace-card > :not(.neo-electric-canvas) {
+  z-index: 4;
+}
+
+body.neo-lens-mode .workspace-card > .neo-capability-rail {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 65;
+}
+
+body.neo-lens-mode .workspace-card.has-messages .neo-lens-presence {
+  opacity: 0.46;
+  filter: saturate(1.12);
+}
+
+body.neo-lens-mode .neo-lens-presence {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: min(470px, calc(100% - 116px));
+  aspect-ratio: 1;
+  transform: translate(calc(-50% + (var(--stage-orbit-x) * 0.24)), calc(-50% + (var(--stage-orbit-y) * 0.24)));
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.58;
+  mix-blend-mode: screen;
+  will-change: transform;
+  transition: transform 180ms ease-out;
+}
+
+.lens-ring,
+.lens-breath {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.lens-ring {
+  border: 1px solid rgba(var(--lens-jade-bright-rgb), 0.13);
+  box-shadow:
+    inset 0 0 34px rgba(var(--lens-jade-rgb), 0.05),
+    0 0 28px rgba(var(--lens-coral-rgb), 0.05);
+}
+
+.lens-ring-one {
+  inset: 16%;
+  border-color: rgba(var(--lens-coral-rgb), 0.22);
+  animation: lensOrbit 18s linear infinite;
+}
+
+.lens-ring-two {
+  inset: 7%;
+  border-style: dashed;
+  border-color: rgba(var(--lens-jade-rgb), 0.18);
+  animation: lensOrbitReverse 28s linear infinite;
+}
+
+.lens-ring-three {
+  inset: -8%;
+  border-color: rgba(var(--lens-line-rgb), 0.08);
+  animation: lensBreathe 5.8s ease-in-out infinite;
+}
+
+.lens-breath {
+  inset: 28% 9% 30%;
+  border-radius: 44% 56% 48% 52%;
+  background:
+    radial-gradient(ellipse 72% 34% at 52% 58%, rgba(var(--lens-jade-rgb), 0.105), transparent 66%),
+    linear-gradient(100deg, transparent 8%, rgba(var(--lens-coral-rgb), 0.075) 31%, rgba(var(--lens-jade-rgb), 0.095) 58%, transparent 84%);
+  filter: blur(24px);
+  opacity: 0.62;
+  transform: rotate(-4deg);
+  animation: lensBreathe 4.8s ease-in-out infinite;
+}
+
+body.neo-lens-mode .workspace-card.has-messages .lens-ring,
+body.neo-lens-mode .workspace-card.has-messages .lens-breath {
+  animation-play-state: running !important;
+}
+
+@keyframes lensBackdropDrift {
+  0% {
+    background-position: 50% 35%, 58% 72%, center;
+    opacity: 0.82;
+  }
+  100% {
+    background-position: 54% 31%, 52% 76%, center;
+    opacity: 1;
+  }
+}
+
+@keyframes lensVignetteBreathe {
+  0%, 100% { opacity: 0.94; }
+  50% { opacity: 0.72; }
+}
+
+@keyframes lensOrbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes lensOrbitReverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes lensBreathe {
+  0%, 100% { opacity: 0.52; transform: scale(0.985); }
+  50% { opacity: 0.96; transform: scale(1.025); }
+}
+
+body.neo-lens-mode .hero {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 98px);
+  z-index: 8;
+  display: none !important;
+  gap: 8px;
+  width: min(720px, calc(100vw - 48px));
+  margin: 0;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+body.neo-lens-mode .hero h1 {
+  margin: 0;
+  color: rgba(var(--lens-ink-rgb), 0.92);
+  font-size: clamp(28px, 3.2vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 26px rgba(var(--lens-jade-rgb), 0.14);
+}
+
+body.neo-lens-mode .hero p {
+  margin: 0;
+  color: var(--lens-muted);
+  font-size: 14px;
+}
+
+body.neo-lens-mode .message-list {
+  position: absolute;
+  left: 50%;
+  top: 62px;
+  bottom: 176px;
+  z-index: 10;
+  width: calc(100% - 84px);
+  margin: 0;
+  padding: 14px 4px 22px;
+  transform: translateX(-50%);
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+body.neo-lens-mode .message-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+body.neo-lens-mode .message {
+  padding: 9px 0;
+}
+
+body.neo-lens-mode .message .meta {
+  color: rgba(var(--lens-ink-dim-rgb), 0.58);
+}
+
+body.neo-lens-mode .message.user .bubble,
+body.neo-lens-mode .message.error .bubble {
+  border: 1px solid rgba(var(--lens-line-rgb), 0.12);
+  color: rgba(var(--lens-ink-rgb), 0.92);
+  background:
+    linear-gradient(135deg, rgba(var(--lens-glow-rgb), 0.10), rgba(var(--lens-glow-rgb), 0.035)),
+    rgba(var(--lens-panel-rgb), 0.46);
+  box-shadow: 0 18px 48px rgba(var(--lens-shadow-rgb), 0.22);
+  backdrop-filter: blur(22px) saturate(1.1);
+  -webkit-backdrop-filter: blur(22px) saturate(1.1);
+}
+
+body.neo-lens-mode .message.assistant .bubble {
+  max-width: min(780px, 100%);
+  padding: 2px 2px;
+  border: 0;
+  border-radius: 0;
+  color: rgba(var(--lens-ink-rgb), 0.92);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  text-shadow: 0 12px 32px rgba(var(--lens-shadow-rgb), 0.46);
+}
+
+body.neo-lens-mode .message.assistant .bubble code {
+  background: rgba(var(--lens-jade-rgb), 0.10);
+  color: rgba(var(--lens-ink-rgb), 0.96);
+}
+
+body.neo-lens-mode .message.assistant .bubble pre {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.14);
+  background: rgba(var(--lens-panel-deep-rgb), 0.52);
+}
+
+body.neo-lens-mode .request-meta {
+  display: none;
+}
+
+body.neo-lens-mode .message.user .bubble {
+  background:
+    linear-gradient(135deg, rgba(var(--lens-jade-rgb), 0.12), rgba(var(--lens-coral-rgb), 0.055)),
+    rgba(var(--lens-panel-rgb), 0.56);
+}
+
+body.neo-lens-mode .composer {
+  --border-radius: 36px;
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  z-index: 20;
+  width: min(660px, calc(100% - 76px));
+  min-height: 132px;
+  margin: 0;
+  padding: 18px 18px 14px;
+  overflow: visible;
+  isolation: isolate;
+  border: 1px solid rgba(var(--lens-line-rgb), 0.20);
+  border-radius: 36px !important;
+  transform: translateX(-50%);
+  color: var(--lens-ink);
+  background:
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.12), rgba(var(--lens-glow-rgb), 0.035)),
+    linear-gradient(180deg, rgba(var(--lens-panel-rgb), 0.74), rgba(var(--lens-panel-rgb), 0.54));
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.18),
+    inset 0 -1px 0 rgba(var(--lens-glow-rgb), 0.06),
+    0 0 0 1px rgba(var(--lens-glow-rgb), 0.025),
+    0 20px 60px rgba(var(--lens-shadow-rgb), 0.40);
+  backdrop-filter: blur(30px) saturate(1.25);
+  -webkit-backdrop-filter: blur(30px) saturate(1.25);
+}
+
+body.neo-lens-mode .composer::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  border-radius: 35px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 8% 100%, rgba(var(--lens-coral-rgb), 0.18), transparent 28%),
+    radial-gradient(circle at 92% 78%, rgba(var(--lens-jade-rgb), 0.18), transparent 32%);
+  opacity: 0.8;
+}
+
+body.neo-lens-mode .composer::after {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  z-index: -2;
+  border-radius: 50px;
+  pointer-events: none;
+  background: linear-gradient(110deg, rgba(var(--lens-coral-rgb), 0.18), transparent 42%, rgba(var(--lens-jade-rgb), 0.22));
+  filter: blur(28px);
+  opacity: 0.48;
+}
+
+html.desktop-mode body.neo-lens-mode .neo-capability-rail,
+html.desktop-mode body.neo-lens-mode .lens-action-button,
+html.desktop-mode body.neo-lens-mode .message.user .bubble,
+html.desktop-mode body.neo-lens-mode .message.error .bubble,
+html.desktop-mode body.neo-lens-mode .composer,
+html.desktop-mode body.neo-lens-mode .attach-button,
+html.desktop-mode body.neo-lens-mode .model-chip,
+html.desktop-mode body.neo-lens-mode .send-button {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html.desktop-mode body.neo-lens-mode .lens-breath {
+  filter: blur(14px);
+}
+
+html.desktop-mode body.neo-lens-mode .composer::after {
+  filter: blur(16px);
+  opacity: 0.38;
+}
+
+body.neo-lens-mode .composer > :not(.neo-electric-canvas) {
+  position: relative;
+  z-index: 4;
+}
+
+.neo-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: max-content;
+  max-width: 100%;
+  min-height: 34px;
+  margin-bottom: 14px;
+  padding: 0 13px;
+  border: 1px solid rgba(var(--lens-line-rgb), 0.16);
+  border-radius: 999px;
+  color: rgba(var(--lens-ink-dim-rgb), 0.74);
+  background: rgba(var(--lens-glow-rgb), 0.045);
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.08);
+}
+
+.neo-context-chip span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--lens-jade);
+  box-shadow: 0 0 16px rgba(var(--lens-jade-rgb), 0.76);
+}
+
+body.neo-lens-mode .composer textarea {
+  min-height: 46px;
+  max-height: 118px;
+  padding: 0 3px 8px;
+  border: 0;
+  border-radius: 0;
+  color: rgba(var(--lens-ink-rgb), 0.92);
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+  font-size: 18px;
+  font-weight: 420;
+  line-height: 1.35;
+}
+
+body.neo-lens-mode .composer textarea::placeholder {
+  color: transparent;
+  opacity: 0;
+}
+
+body.neo-lens-mode .composer textarea:focus {
+  box-shadow: none;
+}
+
+body.neo-lens-mode .composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 4px 0 0;
+}
+
+body.neo-lens-mode .attach-button,
+body.neo-lens-mode .model-chip,
+body.neo-lens-mode .send-button {
+  border: 1px solid rgba(var(--lens-line-rgb), 0.14);
+  color: rgba(var(--lens-ink-rgb), 0.76);
+  background:
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.10), rgba(var(--lens-glow-rgb), 0.03)),
+    rgba(var(--lens-panel-rgb), 0.36);
+  box-shadow: inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.10);
+  backdrop-filter: blur(18px) saturate(1.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  transition: transform 150ms ease, border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+body.neo-lens-mode .attach-button,
+body.neo-lens-mode .send-button {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+}
+
+body.neo-lens-mode .model-chip {
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+body.neo-lens-mode .attach-button:hover,
+body.neo-lens-mode .model-chip:hover,
+body.neo-lens-mode .send-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.42);
+  color: var(--lens-ink-strong);
+  background: rgba(var(--lens-panel-rgb), 0.62);
+}
+
+body.neo-lens-mode .send-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--lens-ink-strong) !important;
+  font-size: 20px;
+  font-weight: 620;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(var(--lens-jade-rgb), 0.24), rgba(var(--lens-jade-rgb), 0.10) 42%, rgba(var(--lens-glow-rgb), 0.035) 100%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.14), rgba(var(--lens-glow-rgb), 0.035)),
+    rgba(var(--lens-panel-rgb), 0.58) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.22),
+    inset 0 0 0 1px rgba(var(--lens-jade-bright-rgb), 0.28),
+    0 0 20px rgba(var(--lens-jade-rgb), 0.18),
+    0 14px 34px rgba(var(--lens-shadow-rgb), 0.32) !important;
+  text-shadow: 0 0 12px rgba(var(--lens-jade-bright-rgb), 0.58);
+}
+
+body.neo-lens-mode .send-button::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(var(--lens-jade-bright-rgb), 0.24);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+body.neo-lens-mode .send-button::after {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(from 210deg, transparent 0 62%, rgba(var(--lens-jade-rgb), 0.32), transparent 78% 100%);
+  opacity: 0.64;
+  animation: sendButtonSweep 5.2s linear infinite;
+  mix-blend-mode: screen;
+}
+
+body.neo-lens-mode .send-button:hover {
+  background:
+    radial-gradient(circle at 50% 44%, rgba(var(--lens-jade-rgb), 0.34), rgba(var(--lens-jade-rgb), 0.13) 42%, rgba(var(--lens-glow-rgb), 0.045) 100%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.17), rgba(var(--lens-glow-rgb), 0.05)),
+    rgba(var(--lens-panel-rgb), 0.72) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.24),
+    inset 0 0 0 1px rgba(var(--lens-jade-bright-rgb), 0.36),
+    0 0 26px rgba(var(--lens-jade-rgb), 0.24),
+    0 16px 38px rgba(var(--lens-shadow-rgb), 0.34) !important;
+}
+
+@keyframes sendButtonSweep {
+  to { transform: rotate(360deg); }
+}
+
+body.neo-lens-mode .inline-send-status {
+  color: rgba(var(--lens-ink-dim-rgb), 0.48);
+  font-size: 12px;
+}
+
+body.neo-lens-mode .composer .neo-electric-canvas {
+  position: absolute !important;
+  left: -26px;
+  top: -26px;
+  z-index: 3;
+  width: calc(100% + 52px);
+  height: calc(100% + 52px);
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+body.neo-lens-mode .workspace-card > .neo-electric-canvas {
+  position: absolute !important;
+  left: -28px;
+  top: -28px;
+  z-index: 3;
+  width: calc(100% + 56px);
+  height: calc(100% + 56px);
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.neo-electric-border-idle .neo-electric-canvas {
+  opacity: 0.58;
+}
+
+.neo-electric-border-active .neo-electric-canvas,
+.composer:focus-within .neo-electric-canvas {
+  opacity: 1;
+}
+
+body.neo-lens-mode .sidebar,
+body.neo-lens-mode .workspace-panel {
+  position: fixed;
+  top: 78px;
+  bottom: 24px;
+  z-index: 58;
+  width: min(380px, calc(100vw - 44px));
+  border: 1px solid rgba(var(--lens-line-rgb), 0.16);
+  border-radius: 24px;
+  color: rgba(var(--lens-ink-rgb), 0.92);
+  background:
+    radial-gradient(circle at 22% 16%, rgba(var(--lens-jade-rgb), 0.12), transparent 34%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.10), rgba(var(--lens-glow-rgb), 0.035)),
+    rgba(var(--lens-panel-rgb), 0.78);
+  box-shadow: 0 28px 86px rgba(var(--lens-shadow-rgb), 0.42);
+  backdrop-filter: blur(30px) saturate(1.18);
+  -webkit-backdrop-filter: blur(30px) saturate(1.18);
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 220ms ease;
+}
+
+body.neo-lens-mode .sidebar {
+  left: 22px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 18px 12px 14px;
+}
+
+body.neo-lens-mode .workspace-panel {
+  right: 22px;
+  width: min(420px, calc(100vw - 44px));
+  padding: 18px 14px 14px;
+}
+
+body.neo-lens-mode.sidebar-closed .sidebar {
+  opacity: 0;
+  transform: translateX(calc(-100% - 34px));
+  pointer-events: none;
+}
+
+body.neo-lens-mode.workspace-closed .workspace-panel {
+  opacity: 0;
+  transform: translateX(calc(100% + 34px));
+  pointer-events: none;
+}
+
+body.neo-lens-mode .resize-handle {
+  display: none !important;
+}
+
+body.neo-lens-mode .nav-item,
+body.neo-lens-mode .settings-entry,
+body.neo-lens-mode .conversation-item,
+body.neo-lens-mode .workspace-tab,
+body.neo-lens-mode .ghost-button,
+body.neo-lens-mode .primary-button {
+  border-radius: 12px;
+}
+
+body.neo-lens-mode .nav-item,
+body.neo-lens-mode .settings-entry,
+body.neo-lens-mode .conversation-item,
+body.neo-lens-mode .workspace-tab,
+body.neo-lens-mode .task-summary,
+body.neo-lens-mode .task-event,
+body.neo-lens-mode .tool-step,
+body.neo-lens-mode .artifact-item,
+body.neo-lens-mode .empty-panel,
+body.neo-lens-mode .file-editor,
+body.neo-lens-mode .terminal-output {
+  border-color: rgba(var(--lens-line-rgb), 0.12);
+  color: rgba(var(--lens-ink-rgb), 0.86);
+  background: rgba(var(--lens-glow-rgb), 0.052);
+}
+
+body.neo-lens-mode .nav-item:hover,
+body.neo-lens-mode .settings-entry:hover,
+body.neo-lens-mode .conversation-item:hover,
+body.neo-lens-mode .workspace-tab:hover,
+body.neo-lens-mode .workspace-tab.active,
+body.neo-lens-mode .conversation-item.active,
+body.neo-lens-mode .nav-item.active {
+  color: var(--lens-ink-strong);
+  background: rgba(var(--lens-jade-rgb), 0.13);
+}
+
+body.neo-lens-mode .history-header,
+body.neo-lens-mode .workspace-panel-header p,
+body.neo-lens-mode .panel-mini-title,
+body.neo-lens-mode .conversation-time,
+body.neo-lens-mode .app-version {
+  color: rgba(var(--lens-ink-dim-rgb), 0.58);
+}
+
+body.neo-lens-mode .workspace-tabs {
+  border-color: rgba(var(--lens-line-rgb), 0.12);
+  background: rgba(var(--lens-glow-rgb), 0.05);
+}
+
+body.neo-lens-mode .settings-sheet {
+  border: 1px solid rgba(var(--lens-line-rgb), 0.16);
+  color: rgba(var(--lens-ink-rgb), 0.92);
+  background:
+    radial-gradient(circle at 72% 18%, rgba(var(--lens-jade-rgb), 0.11), transparent 30%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.10), rgba(var(--lens-glow-rgb), 0.035)),
+    rgba(var(--lens-panel-rgb), 0.88);
+  box-shadow: 0 28px 100px rgba(var(--lens-shadow-rgb), 0.52);
+}
+
+body.neo-lens-mode .sheet-backdrop {
+  background: rgba(var(--lens-shadow-rgb), 0.42);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+body.neo-lens-mode .model-popover,
+body.neo-lens-mode .status-toast {
+  border-color: rgba(var(--lens-line-rgb), 0.16);
+  color: rgba(var(--lens-ink-rgb), 0.92);
+  background:
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.12), rgba(var(--lens-glow-rgb), 0.04)),
+    rgba(var(--lens-panel-rgb), 0.82);
+  box-shadow: 0 24px 72px rgba(var(--lens-shadow-rgb), 0.44);
+}
+
+body.neo-lens-mode .sidebar.neo-border-glow,
+body.neo-lens-mode .workspace-panel.neo-border-glow {
+  --sidebar-text: rgba(var(--lens-ink-rgb), 0.90);
+  --sidebar-muted: rgba(var(--lens-ink-dim-rgb), 0.56);
+  --sidebar-hover: rgba(var(--lens-jade-rgb), 0.085);
+  --sidebar-active: rgba(var(--lens-jade-rgb), 0.13);
+  top: max(28px, calc((100vh - var(--lens-stage-height)) / 2));
+  bottom: max(28px, calc((100vh - var(--lens-stage-height)) / 2));
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.18);
+  border-radius: clamp(30px, 5vmin, 46px);
+  background:
+    radial-gradient(ellipse 70% 38% at 84% 16%, rgba(var(--lens-jade-rgb), 0.10), transparent 70%),
+    radial-gradient(ellipse 54% 34% at 12% 88%, rgba(var(--lens-coral-rgb), 0.08), transparent 72%),
+    linear-gradient(180deg, rgba(var(--lens-panel-blue-rgb), 0.90), rgba(var(--lens-panel-deep-rgb), 0.82));
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.08),
+    inset 0 0 0 1px rgba(var(--lens-jade-rgb), 0.035),
+    0 26px 82px rgba(var(--lens-shadow-rgb), 0.45),
+    0 0 30px rgba(var(--lens-jade-rgb), 0.06);
+}
+
+body.neo-lens-mode .sidebar.neo-border-glow {
+  left: max(22px, calc((100vw - var(--lens-stage-width)) / 2 - 42px));
+  width: min(360px, calc(var(--lens-stage-width) - 44px));
+  padding: 22px 16px 16px;
+}
+
+body.neo-lens-mode .workspace-panel.neo-border-glow {
+  right: max(22px, calc((100vw - var(--lens-stage-width)) / 2 - 42px));
+  width: min(392px, calc(var(--lens-stage-width) - 44px));
+  padding: 22px 16px 16px;
+}
+
+body.neo-lens-mode .sidebar.neo-border-glow .nav-item,
+body.neo-lens-mode .sidebar.neo-border-glow .settings-entry,
+body.neo-lens-mode .sidebar.neo-border-glow .conversation-item,
+body.neo-lens-mode .workspace-panel.neo-border-glow .workspace-tab,
+body.neo-lens-mode .workspace-panel.neo-border-glow .task-summary,
+body.neo-lens-mode .workspace-panel.neo-border-glow .task-event,
+body.neo-lens-mode .workspace-panel.neo-border-glow .tool-step,
+body.neo-lens-mode .workspace-panel.neo-border-glow .artifact-item,
+body.neo-lens-mode .workspace-panel.neo-border-glow .empty-panel,
+body.neo-lens-mode .workspace-panel.neo-border-glow .file-editor,
+body.neo-lens-mode .workspace-panel.neo-border-glow .terminal-output {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.12);
+  background:
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.07), rgba(var(--lens-glow-rgb), 0.025)),
+    rgba(var(--lens-panel-deep-rgb), 0.48);
+  color: rgba(var(--lens-ink-rgb), 0.88);
+  box-shadow: inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.045);
+}
+
+body.neo-lens-mode .sidebar.neo-border-glow .nav-item:hover,
+body.neo-lens-mode .sidebar.neo-border-glow .settings-entry:hover,
+body.neo-lens-mode .sidebar.neo-border-glow .conversation-item:hover,
+body.neo-lens-mode .sidebar.neo-border-glow .nav-item.active,
+body.neo-lens-mode .sidebar.neo-border-glow .conversation-item.active,
+body.neo-lens-mode .workspace-panel.neo-border-glow .workspace-tab:hover,
+body.neo-lens-mode .workspace-panel.neo-border-glow .workspace-tab.active {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.26);
+  background:
+    radial-gradient(ellipse 72% 100% at 0% 50%, rgba(var(--lens-jade-rgb), 0.11), transparent 70%),
+    rgba(var(--lens-glow-rgb), 0.065);
+  color: var(--lens-ink-strong);
+}
+
+body.neo-lens-mode .sidebar.neo-border-glow .nav-logo,
+body.neo-lens-mode .sidebar.neo-border-glow .conversation-icon,
+body.neo-lens-mode .settings-sheet.neo-border-glow .settings-tab-icon {
+  border: 1px solid rgba(var(--lens-jade-bright-rgb), 0.18);
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 68% 32%, rgba(var(--lens-jade-rgb), 0.20), transparent 55%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.13), rgba(var(--lens-glow-rgb), 0.035)),
+    rgba(var(--lens-panel-rgb), 0.66);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.12),
+    0 10px 24px rgba(var(--lens-shadow-rgb), 0.24);
+}
+
+body.neo-lens-mode .sidebar.neo-border-glow .nav-logo::before,
+body.neo-lens-mode .sidebar.neo-border-glow .nav-logo::after,
+body.neo-lens-mode .sidebar.neo-border-glow .conversation-icon::before,
+body.neo-lens-mode .sidebar.neo-border-glow .conversation-icon::after {
+  display: none;
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow {
+  --border-radius: clamp(34px, 6vmin, 54px);
+  --glow-padding: 14px;
+  inset: max(28px, calc((100vh - var(--lens-stage-height)) / 2)) max(28px, calc((100vw - var(--lens-stage-width)) / 2));
+  grid-template-columns: minmax(188px, 220px) minmax(0, 1fr);
+  width: auto;
+  height: auto;
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.18);
+  border-radius: var(--border-radius);
+  background:
+    radial-gradient(ellipse 64% 38% at 78% 10%, rgba(var(--lens-jade-rgb), 0.12), transparent 72%),
+    radial-gradient(ellipse 50% 32% at 0% 90%, rgba(var(--lens-coral-rgb), 0.08), transparent 72%),
+    linear-gradient(180deg, rgba(var(--lens-panel-blue-rgb), 0.94), rgba(var(--lens-panel-deep-rgb), 0.88));
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.08),
+    inset 0 0 0 1px rgba(var(--lens-jade-rgb), 0.035),
+    0 34px 110px rgba(var(--lens-shadow-rgb), 0.55),
+    0 0 36px rgba(var(--lens-jade-rgb), 0.07);
+  transform: translateY(10px) scale(0.982);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow.open {
+  transform: translateY(0) scale(1);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow .sheet-header {
+  padding: 30px 34px 12px;
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow .settings-side {
+  padding: 30px 14px 18px;
+  border-right-color: rgba(var(--lens-jade-bright-rgb), 0.13);
+  background:
+    linear-gradient(180deg, rgba(var(--lens-panel-blue-rgb), 0.70), rgba(var(--lens-panel-deep-rgb), 0.50));
+  box-shadow: inset -1px 0 0 rgba(var(--lens-jade-rgb), 0.05);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow .settings-return,
+body.neo-lens-mode .settings-sheet.neo-border-glow .settings-tab {
+  border-color: transparent;
+  border-radius: 16px;
+  color: rgba(var(--lens-ink-dim-rgb), 0.66);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow .settings-return:hover,
+body.neo-lens-mode .settings-sheet.neo-border-glow .settings-tab:hover,
+body.neo-lens-mode .settings-sheet.neo-border-glow .settings-tab.active {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.18);
+  background:
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.08), rgba(var(--lens-glow-rgb), 0.026)),
+    rgba(var(--lens-jade-rgb), 0.07);
+  color: var(--lens-ink-strong);
+  box-shadow: inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.07);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow .pane-group,
+body.neo-lens-mode .settings-sheet.neo-border-glow .model-status-tile,
+body.neo-lens-mode .settings-sheet.neo-border-glow .route-hint,
+body.neo-lens-mode .settings-sheet.neo-border-glow .appearance-preview,
+body.neo-lens-mode .settings-sheet.neo-border-glow .appearance-region-card,
+body.neo-lens-mode .settings-sheet.neo-border-glow .provider-library-intro,
+body.neo-lens-mode .settings-sheet.neo-border-glow .provider-library-card,
+body.neo-lens-mode .settings-sheet.neo-border-glow .provider-item,
+body.neo-lens-mode .settings-sheet.neo-border-glow .model-card,
+body.neo-lens-mode .settings-sheet.neo-border-glow .skill-card,
+body.neo-lens-mode .settings-sheet.neo-border-glow .memory-card,
+body.neo-lens-mode .settings-sheet.neo-border-glow .memory-item,
+body.neo-lens-mode .settings-sheet.neo-border-glow .archive-item,
+body.neo-lens-mode .settings-sheet.neo-border-glow .release-note,
+body.neo-lens-mode .settings-sheet.neo-border-glow .stitch-adapt-notes article,
+body.neo-lens-mode .settings-sheet.neo-border-glow .update-brand-mark,
+body.neo-lens-mode .settings-sheet.neo-border-glow .environment-item,
+body.neo-lens-mode .settings-sheet.neo-border-glow .toggle-row {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.12);
+  background:
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.06), rgba(var(--lens-glow-rgb), 0.022)),
+    rgba(var(--lens-panel-deep-rgb), 0.50);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.04),
+    0 12px 32px rgba(var(--lens-shadow-rgb), 0.14);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow input,
+body.neo-lens-mode .settings-sheet.neo-border-glow select,
+body.neo-lens-mode .settings-sheet.neo-border-glow textarea {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.16);
+  background: rgba(var(--lens-panel-deep-rgb), 0.62);
+  color: rgba(var(--lens-ink-rgb), 0.92);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow input:focus,
+body.neo-lens-mode .settings-sheet.neo-border-glow select:focus,
+body.neo-lens-mode .settings-sheet.neo-border-glow textarea:focus {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.44);
+  box-shadow: 0 0 0 3px rgba(var(--lens-jade-rgb), 0.11);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow .primary-button {
+  background:
+    radial-gradient(circle at 68% 28%, rgba(var(--lens-glow-rgb), 0.28), transparent 38%),
+    linear-gradient(135deg, var(--lens-primary-a), var(--lens-primary-b));
+  color: var(--lens-ink-strong);
+  box-shadow: 0 16px 38px rgba(var(--lens-jade-rgb), 0.20);
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow .ghost-button {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.16);
+  background: rgba(var(--lens-glow-rgb), 0.045);
+  color: rgba(var(--lens-ink-rgb), 0.82);
+}
+
+body.neo-lens-mode .sheet-backdrop,
+body.neo-lens-mode .modal-backdrop {
+  background: rgba(var(--lens-shadow-rgb), 0.16);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* 遮罩只覆盖应用本体（lens stage），不铺满整个透明窗口的留白；
+     与设置面板对齐（见 .settings-sheet.neo-border-glow 的 inset/圆角）。
+     点外部关闭仍由 closeFloatingSurfacesFromBlankClick 兜底，不依赖遮罩满窗。 */
+  inset: max(28px, calc((100vh - var(--lens-stage-height)) / 2)) max(28px, calc((100vw - var(--lens-stage-width)) / 2));
+  border-radius: clamp(34px, 6vmin, 54px);
+  overflow: hidden;
+}
+
+body.neo-lens-mode .environment-modal {
+  width: min(760px, calc(var(--lens-stage-width) - 48px));
+  max-height: min(560px, calc(100vh - 72px));
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.18);
+  border-radius: clamp(30px, 5vmin, 46px);
+  background:
+    radial-gradient(ellipse 62% 34% at 82% 8%, rgba(var(--lens-jade-rgb), 0.10), transparent 72%),
+    radial-gradient(ellipse 48% 32% at 4% 92%, rgba(var(--lens-coral-rgb), 0.075), transparent 72%),
+    linear-gradient(180deg, rgba(var(--lens-panel-blue-rgb), 0.96), rgba(var(--lens-panel-deep-rgb), 0.90));
+  box-shadow:
+    inset 0 1px 0 rgba(var(--lens-glow-rgb), 0.08),
+    inset 0 0 0 1px rgba(var(--lens-jade-rgb), 0.035),
+    0 34px 110px rgba(var(--lens-shadow-rgb), 0.55),
+    0 0 36px rgba(var(--lens-jade-rgb), 0.07);
+}
+
+body.neo-lens-mode .environment-modal .environment-item,
+body.neo-lens-mode .environment-output {
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.12);
+  background:
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.055), rgba(var(--lens-glow-rgb), 0.018)),
+    rgba(var(--lens-panel-deep-rgb), 0.50);
+}
+
+body.neo-lens-mode .neo-border-glow {
+  --glow-color: hsl(var(--lens-glow-hsl) / 100%);
+  --glow-color-60: hsl(var(--lens-glow-hsl) / 60%);
+  --glow-color-50: hsl(var(--lens-glow-hsl) / 50%);
+  --glow-color-40: hsl(var(--lens-glow-hsl) / 40%);
+  --glow-color-30: hsl(var(--lens-glow-hsl) / 30%);
+  --glow-color-20: hsl(var(--lens-glow-hsl) / 20%);
+  --glow-color-10: hsl(var(--lens-glow-hsl) / 10%);
+  border-color: rgba(var(--lens-jade-bright-rgb), 0.22) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--lens-jade-bright-rgb), 0.055),
+    inset 0 0 30px rgba(var(--lens-jade-rgb), 0.06),
+    0 0 0 1px rgba(var(--lens-jade-rgb), 0.10),
+    0 0 26px rgba(var(--lens-jade-rgb), 0.08),
+    0 26px 82px rgba(var(--lens-shadow-rgb), 0.40) !important;
+}
+
+body.neo-lens-mode .neo-border-glow::before {
+  background:
+    linear-gradient(var(--card-bg-flat) 0 100%) padding-box,
+    radial-gradient(at 82% 18%, var(--lens-jade) 0, transparent 48%) border-box,
+    radial-gradient(at 12% 44%, var(--lens-coral) 0, transparent 46%) border-box,
+    radial-gradient(at 66% 88%, var(--lens-blue) 0, transparent 50%) border-box,
+    linear-gradient(120deg, var(--lens-jade), var(--lens-coral), var(--lens-blue)) border-box;
+}
+
+body.neo-lens-mode .neo-border-glow::after {
+  background:
+    radial-gradient(at 78% 20%, rgba(var(--lens-jade-rgb), 0.48), transparent 50%) padding-box,
+    radial-gradient(at 14% 50%, rgba(var(--lens-coral-rgb), 0.34), transparent 48%) padding-box,
+    radial-gradient(at 62% 84%, rgba(var(--lens-blue-rgb), 0.34), transparent 50%) padding-box;
+}
+
+body.neo-lens-mode .sidebar.neo-border-glow,
+body.neo-lens-mode .workspace-panel.neo-border-glow {
+  border: 1px solid rgba(var(--lens-jade-bright-rgb), 0.18) !important;
+  background:
+    radial-gradient(ellipse 70% 38% at 84% 16%, rgba(var(--lens-jade-rgb), 0.10), transparent 70%),
+    radial-gradient(ellipse 54% 34% at 12% 88%, rgba(var(--lens-coral-rgb), 0.08), transparent 72%),
+    linear-gradient(180deg, rgba(var(--lens-panel-blue-rgb), 0.90), rgba(var(--lens-panel-deep-rgb), 0.82)) !important;
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow {
+  border: 1px solid rgba(var(--lens-jade-bright-rgb), 0.18) !important;
+  background:
+    radial-gradient(ellipse 64% 38% at 78% 10%, rgba(var(--lens-jade-rgb), 0.12), transparent 72%),
+    radial-gradient(ellipse 50% 32% at 0% 90%, rgba(var(--lens-coral-rgb), 0.08), transparent 72%),
+    linear-gradient(180deg, rgba(var(--lens-panel-blue-rgb), 0.94), rgba(var(--lens-panel-deep-rgb), 0.88)) !important;
+}
+
+body.neo-lens-mode .settings-sheet.neo-border-glow .settings-tab-icon {
+  background-color: rgba(var(--lens-panel-rgb), 0.66) !important;
+  background-image:
+    radial-gradient(circle at 68% 32%, rgba(var(--lens-jade-rgb), 0.20), transparent 55%),
+    linear-gradient(145deg, rgba(var(--lens-glow-rgb), 0.13), rgba(var(--lens-glow-rgb), 0.035)) !important;
+}
+
+@media (max-width: 760px) {
+  .neo-brand-mark {
+    top: 20px;
+    left: 20px;
+    font-size: 25px;
+  }
+
+  .neo-capability-rail {
+    top: 14px;
+    right: 14px;
+    bottom: auto;
+    transform: none;
+    gap: 10px;
+  }
+
+  .lens-action-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  body.neo-lens-mode .neo-lens-presence {
+    top: 33%;
+    width: min(82vw, 390px);
+  }
+
+  body.neo-lens-mode .composer {
+    bottom: 18px;
+    width: calc(100% - 30px);
+    min-height: 126px;
+    padding: 16px 14px 12px;
+    border-radius: 32px !important;
+  }
+
+  body.neo-lens-mode .composer textarea {
+    min-height: 42px;
+    font-size: 17px;
+  }
+
+  body.neo-lens-mode .model-chip {
+    max-width: 132px;
+  }
+
+  body.neo-lens-mode .sidebar,
+  body.neo-lens-mode .workspace-panel {
+    left: 14px;
+    right: 14px;
+    top: 72px;
+    bottom: 82px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.neo-lens-mode::before,
+  body.neo-lens-mode::after,
+  .lens-ring,
+  .lens-breath {
+    animation: none !important;
+  }
+
+  .neo-electric-canvas {
+    display: none !important;
+  }
+}
+
+/* ── Lens 浅色主题：只覆盖色板变量，结构与动效全部复用深色规则 ──────────────
+   切换入口在设置 → 外观 → 浅色主题；JS 在 body 上加 lens-theme-light。 */
+body.neo-lens-mode.lens-theme-light {
+  /* 动效主色走「晨雾靛紫」：紫 #6A3FD0 + 蓝 #2F62D8，与浅色 glow UI 同源 */
+  --lens-bg: #eef3f1;
+  --lens-coral: #2f62d8;
+  --lens-coral-strong: #2451b8;
+  --lens-jade: #6a3fd0;
+  --lens-blue: #2f62d8;
+  --lens-primary-a: #6a3fd0;
+  --lens-primary-b: #2f62d8;
+  --lens-ink: #1b2030;
+  --lens-ink-strong: #0d1228;
+  --lens-glow-hsl: 256deg 62% 50%;
+
+  --lens-jade-rgb: 106, 63, 208;
+  --lens-jade-bright-rgb: 139, 92, 246;
+  --lens-coral-rgb: 47, 98, 216;
+  --lens-blue-rgb: 47, 98, 216;
+  --lens-glow-rgb: 255, 255, 255;
+  --lens-ink-rgb: 27, 32, 48;
+  --lens-ink-dim-rgb: 78, 88, 116;
+  --lens-line-rgb: 52, 44, 110;
+  --lens-panel-rgb: 255, 255, 255;
+  --lens-panel-deep-rgb: 240, 242, 250;
+  --lens-panel-blue-rgb: 246, 248, 253;
+  --lens-shadow-rgb: 76, 70, 120;
+
+  --lens-muted: rgba(var(--lens-ink-dim-rgb), 0.80);
+
+  /* glow UI 浅色值 */
+  --glowui-blue: #2F62D8;
+  --glowui-violet: #6A3FD0;
+  --glowui-cyan: #0A85B8;
+  --glowui-ink: #182643;
+  --glowui-ink-strong: #0D1730;
+  --glowui-panel-deep: #EEF2FA;
+  --glowui-glow-hsl: 217deg 70% 46%;
+  --glowui-blue-rgb: 47, 98, 216;
+  --glowui-violet-rgb: 106, 63, 208;
+  --glowui-cyan-rgb: 10, 133, 184;
+  --glowui-glow-rgb: 255, 255, 255;
+  --glowui-ink-rgb: 26, 40, 68;
+  --glowui-ink-dim-rgb: 86, 100, 132;
+  --glowui-panel-rgb: 255, 255, 255;
+  --glowui-panel-deep-rgb: 238, 243, 250;
+}
+
+/* 深色玻璃叠加用的 screen 混合在浅色底上会失效/泛白，浅色统一回普通混合 */
+body.neo-lens-mode.lens-theme-light .neo-lens-presence,
+body.neo-lens-mode.lens-theme-light .lens-cursor-particles,
+body.neo-lens-mode.lens-theme-light .send-button::after,
+body.neo-lens-mode.lens-theme-light .workspace-card::before,
+body.neo-lens-mode.lens-theme-light .neo-border-glow::after {
+  mix-blend-mode: normal;
+}
+
+body.neo-lens-mode.lens-theme-light .message.assistant .bubble {
+  text-shadow: none;
+}
+
+/* 状态色章：深色用的浅文字在浅底上不可读，换成同色系深文字 */
+body.neo-lens-mode.lens-theme-light .key-state,
+body.neo-lens-mode.lens-theme-light .status-pill.ok,
+body.neo-lens-mode.lens-theme-light .office-task-step.complete span {
+  background: rgba(34, 197, 94, 0.14);
+  color: #15803D;
+}
+
+body.neo-lens-mode.lens-theme-light .key-state.missing,
+body.neo-lens-mode.lens-theme-light .status-pill.missing,
+body.neo-lens-mode.lens-theme-light .office-task-step.failed span {
+  background: rgba(248, 113, 113, 0.14);
+  color: #B91C1C;
+}
+
+body.neo-lens-mode.lens-theme-light .status-pill.outdated {
+  background: rgba(251, 191, 36, 0.16);
+  color: #A16207;
+}
+
+body.neo-lens-mode.lens-theme-light .message.error .bubble {
+  border-color: rgba(220, 38, 38, 0.30);
+  background: rgba(254, 226, 226, 0.60);
+  color: #991B1B;
+}
+
+/* ── 0.9.9: 任务执行计划清单（update_plan 工具） ───────────────────────────── */
+.task-plan-list {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 8px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.60);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.56);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* display: grid 会让 hidden 属性失效，没有计划时渲染成一条空白胶囊 */
+.task-plan-list[hidden] {
+  display: none;
+}
+
+.task-plan-step {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.task-plan-mark {
+  text-align: center;
+  color: var(--muted, #8a8f98);
+}
+
+.task-plan-step.done .task-plan-mark { color: var(--green); }
+.task-plan-step.done .task-plan-title { color: var(--muted, #8a8f98); text-decoration: line-through; }
+.task-plan-step.in_progress .task-plan-mark { color: var(--blue); animation: pulse 1.2s ease-in-out infinite; }
+.task-plan-step.in_progress .task-plan-title { font-weight: 600; }
+
+/* ── 0.9.9: 本地命令单次审批确认条 ─────────────────────────────────────────── */
+.command-confirm-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: grid;
+  gap: 8px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 12px;
+  background: rgba(28, 30, 36, 0.92);
+  color: #f3f4f6;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.command-confirm-text { display: grid; gap: 4px; }
+.command-confirm-text strong { font-size: 13px; }
+.command-confirm-text small { font-size: 11px; opacity: 0.65; }
+.command-confirm-purpose { font-size: 12px; opacity: 0.85; }
+
+.command-confirm-text code {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  word-break: break-all;
+  max-height: 80px;
+  overflow: auto;
+}
+
+.command-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.command-confirm-actions button {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.10);
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.command-confirm-actions button[data-confirm-action="allow"] {
+  background: var(--blue, #3b82f6);
+  border-color: transparent;
+  color: #fff;
+}
+
+.command-confirm-actions button[data-confirm-action="deny"]:hover { border-color: var(--danger, #ef4444); color: var(--danger, #ef4444); }
+.command-confirm-actions button:hover { filter: brightness(1.1); }
+
+/* ── 0.9.9: 供应商/模型选择器细滚动条 ──────────────────────────────────────── */
+/* 注意：Chromium 中设置标准 scrollbar-width 会禁用 ::-webkit-scrollbar 自定义，
+   因此标准属性只通过 @supports 提供给 Firefox。 */
+@supports (-moz-appearance: none) {
+  .picker-list {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(120, 113, 108, 0.28) transparent;
+  }
+}
+
+.picker-list::-webkit-scrollbar { width: 3px; }
+.picker-list::-webkit-scrollbar-track { background: transparent; }
+.picker-list::-webkit-scrollbar-thumb {
+  background: rgba(120, 113, 108, 0.22);
+  border-radius: 999px;
+}
+.picker-list::-webkit-scrollbar-thumb:hover { background: rgba(120, 113, 108, 0.40); }
+
+/* ── 0.9.9: 鼠标星尘尾迹粒子层 ─────────────────────────────────────────────── */
+.lens-cursor-particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 3;
+  mix-blend-mode: screen;
+}
+
+/* ── 0.9.9: 历史/工作台/设置面板收进舱体内部 ─────────────────────────────────
+   原设计让面板伸出舱体边缘 42px，在打包后的固定尺寸窗口里会被窗口边界裁切，
+   看起来像面板"飞出界面"。此处统一约束到舱体（lens stage)内部。 */
+body.neo-lens-mode .sidebar,
+body.neo-lens-mode .sidebar.neo-border-glow,
+body.neo-lens-mode .workspace-panel,
+body.neo-lens-mode .workspace-panel.neo-border-glow {
+  top: calc((100vh - var(--lens-stage-height)) / 2 + 14px);
+  bottom: calc((100vh - var(--lens-stage-height)) / 2 + 14px);
+}
+
+body.neo-lens-mode .sidebar,
+body.neo-lens-mode .sidebar.neo-border-glow {
+  left: calc((100vw - var(--lens-stage-width)) / 2 + 14px);
+  width: min(340px, calc(var(--lens-stage-width) - 28px));
+}
+
+body.neo-lens-mode .workspace-panel,
+body.neo-lens-mode .workspace-panel.neo-border-glow {
+  right: calc((100vw - var(--lens-stage-width)) / 2 + 14px);
+  width: min(380px, calc(var(--lens-stage-width) - 28px));
+}
+
+body.neo-lens-mode .settings-sheet {
+  top: calc((100vh - var(--lens-stage-height)) / 2 + 10px);
+  bottom: calc((100vh - var(--lens-stage-height)) / 2 + 10px);
+  left: calc((100vw - var(--lens-stage-width)) / 2 + 10px);
+  right: calc((100vw - var(--lens-stage-width)) / 2 + 10px);
+  border-radius: clamp(36px, 7vmin, 64px);
+  overflow: hidden;
+}
+
+/* lens 模式的工作台是浮层，不参与旧三栏布局的窄屏隐藏 */
+@media (max-width: 900px) {
+  body.neo-lens-mode .workspace-panel { display: grid; }
+}
+
+/* 工作台/成果/工具列表滚动条与选择器统一为细样式 */
+.task-event-list::-webkit-scrollbar,
+.tool-step-list::-webkit-scrollbar,
+.artifact-list::-webkit-scrollbar,
+.task-plan-list::-webkit-scrollbar,
+.file-tree::-webkit-scrollbar {
+  width: 3px;
+}
+.task-event-list::-webkit-scrollbar-thumb,
+.tool-step-list::-webkit-scrollbar-thumb,
+.artifact-list::-webkit-scrollbar-thumb,
+.task-plan-list::-webkit-scrollbar-thumb,
+.file-tree::-webkit-scrollbar-thumb {
+  background: rgba(120, 113, 108, 0.22);
+  border-radius: 999px;
+}
+.task-event-list::-webkit-scrollbar-track,
+.tool-step-list::-webkit-scrollbar-track,
+.artifact-list::-webkit-scrollbar-track,
+.task-plan-list::-webkit-scrollbar-track,
+.file-tree::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── 性能：窗口失焦/隐藏时由 JS 加上 neo-anim-paused，暂停所有装饰动画 ── */
+body.neo-anim-paused *,
+body.neo-anim-paused *::before,
+body.neo-anim-paused *::after {
+  animation-play-state: paused !important;
+}
+
+/* ── 性能：毛玻璃收敛 ───────────────────────────────────────────────────────
+   小元素本就叠在已模糊的大容器（侧栏/工作台/设置面板/输入框/全窗口背景）上，
+   再做一次 backdrop-filter 是纯开销、几乎不可见。这里统一关掉小元素的二次模糊，
+   大容器的玻璃质感全部保留。如某一处质感不对，删除对应行即可单独回退。 */
+input, select, textarea,
+.titlebar-right,
+.resize-handle,
+.workspace-toggle,
+.titlebar-workspace-toggle,
+.titlebar-workspace-toggle.workspace-toggle.active,
+.message-attachment-card,
+.workspace-tabs,
+.task-summary,
+.task-metrics span,
+.task-event,
+.tool-step, .empty-panel,
+.artifact-item,
+.model-card,
+.update-progress-panel,
+.update-brand-mark,
+.model-status-tile,
+.route-hint,
+.appearance-preview-zone,
+.range-setting input[type="range"],
+.provider-library-intro,
+.provider-library-card,
+.skill-library-intro,
+.skill-card,
+.pane-group,
+.ghost-button,
+.toggle-row,
+.environment-item,
+.archive-item,
+.memory-item,
+.attachment-chip,
+.task-plan-list,
+.lens-action-button,
+.sidebar.neo-border-glow .conversation-icon::after,
+.settings-sheet.neo-border-glow .settings-tab-icon,
+body.neo-lens-mode .message.error .bubble,
+body.neo-lens-mode .message.assistant .bubble,
+body.neo-lens-mode .message.user .bubble,
+body.neo-lens-mode .attach-button,
+body.neo-lens-mode .model-chip,
+body.neo-lens-mode .send-button,
+html.desktop-mode body.neo-lens-mode .send-button {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ── 流畅优先模式（外观设置开关）：全局去玻璃模糊、隐藏装饰画布与光效 ── */
+body.neo-performance-mode::before,
+body.neo-performance-mode *,
+body.neo-performance-mode *::before,
+body.neo-performance-mode *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body.neo-performance-mode .neo-electric-canvas,
+body.neo-performance-mode .ambient-motion,
+body.neo-performance-mode .laser-flow-stage,
+body.neo-performance-mode .edge-light {
+  display: none !important;
 }

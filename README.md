@@ -126,7 +126,7 @@ outputs/desktop/
 npm run package:mac
 ```
 
-把 `outputs/desktop/neo-0.5.0-mac-arm64.dmg` 发给对方即可。对方安装后首次打开会自动进入部署检测：
+把 `outputs/desktop/neo-1.2.0-mac-arm64.dmg` 发给对方即可。对方安装后首次打开会自动进入部署检测：
 
 - 自动检测 Shell、curl、Homebrew、Node.js、npm、Git、ripgrep、Python 表格环境和桌面依赖
 - 缺少环境时可点击“一键补齐环境”，neo 会打开终端按顺序安装

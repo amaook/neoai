@@ -1,6 +1,8 @@
 {
   "name": "neo",
-  "version": "0.9.7",
+  "version": "1.8.0",
+  "displayVersion": "1.8.0",
+  "shortVersionWindows": "1.8.0",
   "description": "A local desktop AI agent with configurable API providers and models.",
   "author": "neo",
   "private": true,
@@ -19,10 +21,10 @@
     "package:dir": "electron-builder --dir --publish never",
     "package:mac": "electron-builder --mac dmg --publish never",
     "package:mac-x64": "electron-builder --mac dmg --x64 --publish never",
-    "package:win": "electron-builder --win nsis zip --x64 --publish never",
-    "package:win-x86": "electron-builder --win nsis zip --ia32 --publish never",
+    "package:win": "node scripts/package-win.cjs --win nsis zip --x64 --publish never",
+    "package:win-x86": "node scripts/package-win.cjs --win nsis zip --ia32 --publish never",
     "release:mac": "electron-builder --mac dmg zip --publish always",
-    "release:win": "electron-builder --win nsis zip --x64 --publish always"
+    "release:win": "node scripts/package-win.cjs --win nsis zip --x64 --publish always"
   },
   "engines": {
     "node": ">=18"
@@ -31,7 +33,8 @@
     "appId": "ai.neo.desktop",
     "productName": "neo",
     "artifactName": "neo-${version}-${os}-${arch}.${ext}",
-    "afterPack": "scripts/tune-mac-helpers.cjs",
+    "buildVersion": "1.8.0",
+    "afterPack": "scripts/after-pack.cjs",
     "icon": "build/icon.png",
     "directories": {
       "output": "outputs/desktop"
@@ -57,6 +60,8 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
+      "bundleShortVersion": "1.8.0",
+      "bundleVersion": "1.8.0",
       "target": [
         "dmg"
       ]
@@ -66,12 +71,14 @@
       "target": [
         "nsis",
         "zip"
-      ]
+      ],
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
+      "warningsAsErrors": false,
       "include": "build/installer.nsh",
       "uninstallDisplayName": "neo ${version}"
     }
@@ -79,6 +86,7 @@
   "devDependencies": {
     "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
+    "resedit": "^1.7.2",
     "vitest": "^2.0.0"
   },
   "dependencies": {
@@ -88,6 +96,7 @@
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.4.296",
     "read-excel-file": "^9.0.10",
+    "three": "^0.184.0",
     "write-excel-file": "^4.0.7"
   },
   "optionalDependencies": {

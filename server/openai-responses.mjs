@@ -16,6 +16,7 @@ import {
 import { blockPseudoToolOutput } from "./pseudo-tools.mjs";
 import {
   blockUnverifiedCompletion,
+  maxTokensTruncationContent,
   repeatedToolArgumentFailure,
   runToolWithReceipt,
   toolArgumentFuseContent
@@ -140,7 +141,8 @@ export async function callOpenAIResponses({
   enableTools,
   enabledSkills,
   toolConsent,
-  signal
+  signal,
+  confirmCommand
 }) {
   const instructions = responseInstructions(messages);
   const input = initialResponseInput(messages);
@@ -155,6 +157,12 @@ export async function callOpenAIResponses({
       body: responseRequestBody({ model, input, instructions, tools, temperature, maxTokens })
     });
     const toolCalls = responseFunctionCalls(data);
+    // Responses API 的截断标记：status incomplete + reason max_output_tokens，
+    // 此时 function_call.arguments 可能不完整，不能执行。
+    if (toolCalls.length && data?.status === "incomplete" && data?.incomplete_details?.reason === "max_output_tokens") {
+      const toolNames = toolCalls.map((call) => call.name).filter(Boolean);
+      return { content: maxTokensTruncationContent(toolNames), usage: usageFromResponses(data), raw: data, steps, maxTokensTruncated: true };
+    }
     if (!toolCalls.length) {
       const content = responseTextContent(data);
       const blocked = blockPseudoToolOutput(content, { enableTools });
@@ -174,7 +182,8 @@ export async function callOpenAIResponses({
         args,
         toolConsent,
         availableToolNames,
-        runner: handleToolCall
+        runner: handleToolCall,
+        confirmCommand
       });
       steps.push(step);
       roundSteps.push(step);

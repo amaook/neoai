@@ -75,7 +75,7 @@ const kimiModelPresets = [
 ];
 
 const defaultModelRouting = {
-  enabled: true,
+  enabled: false,
   textProviderId: "deepseek",
   textModel: "deepseek-v4-flash",
   visionProviderId: "qwen",
@@ -147,7 +147,7 @@ const providerPresets = [
     name: "Kimi",
     protocol: "openai",
     apiMode: "chat_completions",
-    baseUrl: "https://api.moonshot.ai/v1",
+    baseUrl: "https://api.moonshot.cn/v1",
     apiKey: "",
     models: kimiModelPresets
   },
@@ -256,7 +256,20 @@ const providerLibrary = [
   {
     rank: 6,
     id: "kimi",
-    name: "Moonshot Kimi",
+    name: "Moonshot Kimi 国内",
+    family: "Kimi K2.6 系列",
+    protocol: "openai",
+    apiMode: "chat_completions",
+    baseUrl: "https://api.moonshot.cn/v1",
+    models: kimiModelPresets,
+    docsUrl: "https://platform.kimi.com/docs",
+    keyUrl: "https://platform.kimi.com/",
+    rankNote: "国内 Kimi 开放平台，Key 需要配套使用 api.moonshot.cn。"
+  },
+  {
+    rank: 6.1,
+    id: "kimi-global",
+    name: "Moonshot Kimi Global",
     family: "Kimi K2.6 系列",
     protocol: "openai",
     apiMode: "chat_completions",
@@ -264,7 +277,7 @@ const providerLibrary = [
     models: kimiModelPresets,
     docsUrl: "https://platform.kimi.ai/docs",
     keyUrl: "https://platform.kimi.ai/",
-    rankNote: "长上下文和中文任务常用，OpenAI 兼容迁移成本低。"
+    rankNote: "国际 Kimi 平台，Key 需要配套使用 api.moonshot.ai。"
   },
   {
     rank: 7,
@@ -448,9 +461,9 @@ const skillLibrary = [
     category: "文件",
     recommendation: "推荐 5.0",
     defaultEnabled: true,
-    tools: ["list_files", "read_file", "write_file", "export_image", "search_files", "verify_office_file"],
-    summary: "读取、搜索、写入工作区文件，适合整理项目、生成文档和查找内容。",
-    prompt: "技能：本地文件助手。优先使用工作区相对路径；写入文件前确认路径清晰；用户要海报、封面、卡片、图片版结果时，先生成 HTML/SVG，再调用 export_image 导出真实 PNG/JPG；不要删除或覆盖用户未明确要求修改的文件。"
+    tools: ["list_files", "read_file", "search_workspace", "write_file", "edit_file", "export_image", "search_files", "verify_office_file"],
+    summary: "读取、搜索、写入工作区文件；可跨文件检索（含 Excel/Word/PDF/PPT 内容）回答\"我那份文件里…\"这类问题。",
+    prompt: "技能：本地文件助手。回答关于本地文件、但不确定在哪个文件时，先用 search_workspace 跨文件检索（能搜进 Excel/Word/PDF/PPT 内容），再 read_file 读最相关的，回答给出处路径。优先工作区相对路径；改文件优先 edit_file，新建或全量重写才用 write_file；要图片版结果先生成 HTML/SVG 再 export_image；不要删改用户没要求改的文件。"
   },
   {
     id: "spreadsheet-pro",
@@ -459,9 +472,9 @@ const skillLibrary = [
     category: "Excel / CSV",
     recommendation: "推荐 5.0",
     defaultEnabled: true,
-    tools: ["inspect_office_file", "read_excel_file", "create_excel_file", "clean_table_file", "clean_table_files", "verify_office_file"],
-    summary: "读取、生成、清洗 Excel/CSV，支持去空行、去重、金额日期规范化和批量洗表。",
-    prompt: "技能：表格处理。遇到 Excel/CSV 时先读取结构和字段，再处理；清洗表格默认另存新文件；批量任务优先使用 clean_table_files。"
+    tools: ["inspect_office_file", "read_excel_file", "check_table", "chart_from_table", "pivot_table", "create_excel_file", "clean_table_file", "clean_table_files", "verify_office_file"],
+    summary: "读取、体检、出图、透视、生成、清洗 Excel/CSV，支持数据质量报告、趋势/对比/占比图、分组汇总/透视表、去空行、去重、金额日期规范化和批量洗表。",
+    prompt: "技能：表格处理。遇到 Excel/CSV 时先读取结构和字段；拿到可能脏的表格先用 check_table 做数据质量体检（缺失率、类型/格式一致性、重复行、异常值）再决定怎么处理；要可视化数据（趋势、对比、占比）用 chart_from_table 出折线/柱/饼图；要按维度汇总/透视（按部门按月求和、按地区计数等）用 pivot_table；清洗表格默认另存新文件；批量任务优先使用 clean_table_files。"
   },
   {
     id: "document-reader",
@@ -470,9 +483,9 @@ const skillLibrary = [
     category: "PDF / Word",
     recommendation: "推荐 4.8",
     defaultEnabled: true,
-    tools: ["inspect_office_file", "read_file", "create_word_file", "create_ppt_file", "verify_office_file"],
-    summary: "解析 PDF、Word、PPT 和文本文件，提取摘要、待办、表格线索，也能生成基础 Word/PPT。",
-    prompt: "技能：文档阅读。读取 Word/PDF/PPT 时先调用 inspect_office_file；生成 Word 用 create_word_file，生成 PPT 用 create_ppt_file；完成后以校验结果为准。"
+    tools: ["inspect_office_file", "read_file", "read_image_file", "get_template", "create_word_file", "create_ppt_file", "create_pdf_file", "verify_office_file"],
+    summary: "解析 PDF/Word/PPT/文本，读图片/扫描件里的字（OCR，需视觉模型）；提供周报/纪要/简历等模板，并能生成 Word/PPT/PDF。",
+    prompt: "技能：文档阅读。读取时先 inspect_office_file；读图片/扫描件文字用 read_image_file（需视觉模型）；做周报/会议纪要/简历/项目计划/工作总结先用 get_template 取骨架；生成 Word 用 create_word_file（传 markdown 可把 Markdown 自动转 Word），PPT 用 create_ppt_file，PDF 用 create_pdf_file（仅桌面端）；完成后以校验结果为准。"
   },
   {
     id: "finance-tables",
@@ -481,9 +494,9 @@ const skillLibrary = [
     category: "财务",
     recommendation: "推荐 4.8",
     defaultEnabled: false,
-    tools: ["inspect_office_file", "read_excel_file", "create_excel_file", "clean_table_file", "clean_table_files", "verify_office_file"],
-    summary: "适合工资表、报价单、账单、对账和金额校验。",
-    prompt: "技能：财务表格。处理金额、税费、合计和对账时必须严谨，主动说明口径、异常值和复核建议。"
+    tools: ["inspect_office_file", "read_excel_file", "check_table", "chart_from_table", "pivot_table", "create_excel_file", "clean_table_file", "clean_table_files", "verify_office_file"],
+    summary: "适合工资表、报价单、账单、对账和金额校验，可先用 check_table 体检数据质量、用 pivot_table 按维度汇总、用 chart_from_table 出金额趋势/占比图。",
+    prompt: "技能：财务表格。处理金额、税费、合计和对账时必须严谨；先用 check_table 体检（缺失、重复行、金额列异常值），主动说明口径、异常值和复核建议；需要展示金额趋势或占比时用 chart_from_table 出图；要按部门/月份/项目汇总或做透视表时用 pivot_table。"
   },
   {
     id: "code-review",
@@ -503,9 +516,20 @@ const skillLibrary = [
     category: "网页",
     recommendation: "推荐 4.6",
     defaultEnabled: false,
-    tools: ["search_web", "read_web_page", "download_url", "open_url"],
-    summary: "搜索网页、读取网页正文、下载网页文件，并在默认浏览器打开链接。",
-    prompt: "技能：网页助手。需要最新网页信息时先搜索或读取网页；引用网页内容时说明来源 URL；下载文件默认保存到工作区 Downloads。"
+    tools: ["search_web", "read_web_page", "read_web_pages", "download_url", "open_url"],
+    summary: "搜索网页、读取网页正文、批量读取多个来源、下载网页文件，并在默认浏览器打开链接。",
+    prompt: "技能：网页助手。需要最新网页信息时先搜索或读取网页；一次要看多个来源时用 read_web_pages 批量读取；引用网页内容时说明来源 URL；下载文件默认保存到工作区 Downloads。"
+  },
+  {
+    id: "research",
+    icon: "✦",
+    name: "信息搜集",
+    category: "搜集",
+    recommendation: "推荐 4.7",
+    defaultEnabled: false,
+    tools: ["search_web", "read_web_pages", "read_web_page", "save_research_report", "write_file", "download_url"],
+    summary: "围绕一个主题多轮检索、批量读取来源，并整理成带来源引用的 Markdown 简报落地工作区。",
+    prompt: "技能：信息搜集。把一个主题搜集成带来源的简报：先用 search_web 做 2-3 轮检索（可用 site 限定站点、freshness 限定时效），再用 read_web_pages 批量读取最相关来源，去重去低质后按主题归纳，用 save_research_report 写成结构化简报（自动落到 Research/<日期>-<主题>.md 并生成去重带日期的来源列表）；不要编造来源里没有的事实。需要同时开启「访问网页」和「写入工作区文件」权限。"
   },
   {
     id: "desktop-control",
@@ -528,6 +552,28 @@ const skillLibrary = [
     tools: ["run_command"],
     summary: "允许模型在工作区运行命令，适合测试、构建和自动化，风险更高。",
     prompt: "技能：本地命令。运行命令前说明目的；涉及删除、覆盖、安装、联网、权限提升时必须先征求确认。"
+  },
+  {
+    id: "system-control",
+    icon: "⚙",
+    name: "系统与软件设置",
+    category: "高级",
+    recommendation: "谨慎开启",
+    defaultEnabled: false,
+    tools: ["run_automation_script", "open_desktop_app"],
+    summary: "用脚本调整系统/软件设置（mac AppleScript / win PowerShell），每条脚本都要你单独确认，破坏性操作会被拦。",
+    prompt: "技能：系统与软件设置。按平台用 run_automation_script：mac 用 applescript（如 defaults write、System Events），win 用 powershell（如 Set-ItemProperty、reg）。每条脚本在 purpose 里说清改什么、如何撤销；优先可逆做法；绝不做不可逆/破坏性操作。需要先开软件时用 open_desktop_app。需开启「运行系统/软件设置脚本」权限。"
+  },
+  {
+    id: "screen-view",
+    icon: "◳",
+    name: "看屏幕",
+    category: "高级",
+    recommendation: "谨慎开启",
+    defaultEnabled: false,
+    tools: ["screen_capture", "open_desktop_app"],
+    summary: "截取当前屏幕给模型看，用来读界面、定位、给操作指导（只读、不点击）。仅桌面端，且需支持图片的模型；屏幕画面会发送给所选模型供应商。",
+    prompt: "技能：看屏幕。用 screen_capture 截取当前屏幕来读取界面文字、定位元素或一步步指导用户；这是只读能力，不能点击或操作软件，也不要声称已经操作。需要先打开某个软件时用 open_desktop_app。需开启「截取屏幕画面」权限，并使用支持图片输入的模型（如 Qwen-VL / GPT-4o 系 / Claude / Gemini）。"
   }
 ];
 
@@ -539,12 +585,14 @@ const defaultToolConsent = Object.freeze({
   externalPaths: [],
   web: false,
   desktop: false,
-  command: false
+  command: false,
+  systemControl: false,
+  screenView: false
 });
 
-const readToolNames = new Set(["list_files", "read_file", "inspect_office_file", "read_excel_file", "verify_office_file", "search_files"]);
-const writeToolNames = new Set(["write_file", "export_image", "create_excel_file", "create_word_file", "create_ppt_file", "clean_table_file", "clean_table_files", "download_url"]);
-const webToolNames = new Set(["search_web", "read_web_page", "download_url"]);
+const readToolNames = new Set(["list_files", "read_file", "inspect_office_file", "read_excel_file", "check_table", "verify_office_file", "get_template", "read_image_file", "search_workspace", "search_files"]);
+const writeToolNames = new Set(["write_file", "edit_file", "export_image", "chart_from_table", "pivot_table", "create_excel_file", "create_word_file", "create_ppt_file", "create_pdf_file", "clean_table_file", "clean_table_files", "save_research_report", "download_url"]);
+const webToolNames = new Set(["search_web", "read_web_page", "read_web_pages", "download_url"]);
 const desktopToolNames = new Set(["open_url", "open_workspace_item", "open_desktop_app", "show_desktop_notification"]);
 
 const toolDescriptions = {
@@ -552,23 +600,34 @@ const toolDescriptions = {
   read_file: "read_file(path)：读取工作区文件或已授权外部路径，支持文本、PDF、Word 预览和部分结构化文件",
   inspect_office_file: "inspect_office_file(path)：检查 Excel/CSV/Word/PDF/PPT，返回解析状态、行列/页数、质量检查和任务步骤",
   read_excel_file: "read_excel_file(path)：读取工作区内或已授权外部路径的真实 .xlsx/.xlsm/.csv/.tsv 表格内容",
+  check_table: "check_table(path, sheet, max_rows)：对 .xlsx/.xlsm/.csv/.tsv 表格做数据质量体检——逐列缺失率、类型/格式一致性、重复行、数值异常值、日期格式混用、首尾空格，返回结构化报告和可直接保存的 Markdown 摘要；清洗/分析脏表前先用它",
+  chart_from_table: "chart_from_table(path, type, label_column, value_columns, title, output_path)：从 .xlsx/.xlsm/.csv/.tsv 出图——折线/柱/饼图，选标签列和数值列，保存为真实图片（默认 charts/<名>-<类型>.svg，带文字可缩放；要位图可指定 .png/.jpg，桌面端文字完整）",
+  pivot_table: "pivot_table(path, group_by, values, agg, pivot_column, output_path)：分组汇总/透视——按维度分组对数值列做 sum/avg/count/min/max，设 pivot_column 可做交叉透视表，结果另存 .xlsx（或 .csv）",
   write_file: "write_file(path, content)：写入或创建文本文件（.json、.md、.py、.html、.csv 等）",
   export_image: "export_image(input_path/html/svg, output_path, width, height, format)：把 HTML/SVG 渲染成真实 PNG/JPG 图片文件",
   create_excel_file: "create_excel_file(path, sheet_name, columns, rows, sheets)：生成真实 .xlsx/.xlsm 文件",
-  create_word_file: "create_word_file(path, title, paragraphs, sections, tables)：生成真实 .docx Word 文件并回读校验",
+  create_word_file: "create_word_file(path, title, markdown/paragraphs/sections/tables)：生成真实 .docx Word 文件并回读校验；传 markdown 可把 Markdown 自动转成 Word",
   create_ppt_file: "create_ppt_file(path, title, subtitle, slides, sections)：生成真实 .pptx PPT 文件并回读校验",
+  create_pdf_file: "create_pdf_file(path, title, markdown/html)：把 Markdown 或 HTML 渲染成真实 .pdf 文件（仅桌面端）并回读校验",
   clean_table_file: "clean_table_file(path, output_path, sheet, operations, options)：用 Python 清洗 .xlsx/.xlsm/.csv/.tsv 表格，默认另存新 .xlsx，不覆盖原文件",
   clean_table_files: "clean_table_files(paths, output_dir, operations, options)：批量清洗多个表格文件，并为每个文件另存清洗结果",
   verify_office_file: "verify_office_file(path)：按文件类型回读校验 Excel/CSV/Word/PDF/PPT 输出文件",
-  search_files: "search_files(query, glob)：搜索文件内容",
+  get_template: "get_template(name)：获取周报/会议纪要/简历/项目计划/工作总结等文档的 Markdown 骨架（不填 name 列出全部）",
+  read_image_file: "read_image_file(path)：读取工作区图片/扫描件并交给视觉模型，用于 OCR 读字、看图理解（需支持图片的模型）",
+  search_workspace: "search_workspace(query, max_results)：跨整个工作区按关键词检索，能搜进 Excel/Word/PDF/PPT 内容，返回最相关文件和片段——用于\"问我的文件\"",
+  search_files: "search_files(query, glob)：用 ripgrep 搜纯文本文件内容",
   search_web: "search_web(query, limit)：搜索网页并返回标题、链接和简要结果",
   read_web_page: "read_web_page(url, output_path, max_chars)：读取网页正文和链接，可保存为工作区 Markdown",
+  read_web_pages: "read_web_pages(urls, max_chars_each)：一次并行读取多个网页正文，适合多来源搜集",
+  save_research_report: "save_research_report(title, summary, sections, sources, output_path)：把搜集结果写成带去重来源的 Markdown 简报，默认落到 Research/",
   download_url: "download_url(url, output_path)：把网页文件下载到本地工作区",
   open_url: "open_url(url)：在默认浏览器打开网页",
   open_workspace_item: "open_workspace_item(path, reveal)：打开或定位工作区里的文件/文件夹",
   open_desktop_app: "open_desktop_app(app)：打开本机应用，但不自动点击软件内部界面",
   show_desktop_notification: "show_desktop_notification(title, message)：显示系统通知",
-  run_command: "run_command(command)：执行本地 shell 命令"
+  run_command: "run_command(command)：执行本地 shell 命令",
+  run_automation_script: "run_automation_script(language, script, purpose)：运行 AppleScript/PowerShell/Shell 脚本调整系统或软件设置，每条需用户确认",
+  screen_capture: "screen_capture(max_width)：截取当前屏幕画面供模型查看（只读，不点击），仅桌面端且需视觉模型"
 };
 
 const memoryTypes = {
@@ -599,7 +658,9 @@ const storageKey = "neo-ai-state-v2";
 const legacyStorageKey = "neo-ai-state-v1";
 const onboardingStorageKey = "neo-ai-onboarding-complete-v1";
 const environmentPromptMutedStorageKey = "neo-environment-prompt-muted-v1";
+const environmentMirrorStorageKey = "neo-environment-mirror-v1";
 const agentProfileChannelName = "neo-agent-profile-v1";
+const livingAssistantModeId = "living-assistant-v1";
 const defaultAgentAvatar = "/assets/logo.png";
 const chatRequestTimeoutMs = 70000;
 const apiTestTimeoutMs = 35000;
@@ -615,7 +676,6 @@ const els = {
   collapseWorkspaceBtn: document.querySelector("#collapseWorkspaceBtn"),
   workspacePanel: document.querySelector("#workspacePanel"),
   workspacePanelStatus: document.querySelector("#workspacePanelStatus"),
-  workspaceStatusVersion: document.querySelector("#workspaceStatusVersion"),
   ambientMotionCanvas: document.querySelector("#ambientMotionCanvas"),
   workspaceTabs: document.querySelectorAll("[data-panel-tab]"),
   workspaceSections: document.querySelectorAll("[data-panel-section]"),
@@ -624,6 +684,7 @@ const els = {
   taskRunTitle: document.querySelector("#taskRunTitle"),
   taskRunDetail: document.querySelector("#taskRunDetail"),
   taskEventList: document.querySelector("#taskEventList"),
+  taskPlanList: document.querySelector("#taskPlanList"),
   clearTaskEventsBtn: document.querySelector("#clearTaskEventsBtn"),
   retryTaskBtn: document.querySelector("#retryTaskBtn"),
   taskMetrics: document.querySelector("#taskMetrics"),
@@ -641,6 +702,9 @@ const els = {
   terminalForm: document.querySelector("#terminalForm"),
   terminalInput: document.querySelector("#terminalInput"),
   terminalOutput: document.querySelector("#terminalOutput"),
+  auditLogList: document.querySelector("#auditLogList"),
+  refreshAuditBtn: document.querySelector("#refreshAuditBtn"),
+  clearAuditBtn: document.querySelector("#clearAuditBtn"),
   historyPane: document.querySelector(".history-pane"),
   conversationList: document.querySelector("#conversationList"),
   toggleHistoryBtn: document.querySelector("#toggleHistoryBtn"),
@@ -659,6 +723,7 @@ const els = {
   aboutVersionLabel: document.querySelector("#aboutVersionLabel"),
   healthText: document.querySelector("#healthText"),
   appVersionBadge: document.querySelector("#appVersionBadge"),
+  workspaceCard: document.querySelector(".workspace-card"),
   messageList: document.querySelector("#messageList"),
   heroBlock: document.querySelector("#heroBlock"),
   chatForm: document.querySelector("#chatForm"),
@@ -671,6 +736,9 @@ const els = {
   sendStatusDetail: document.querySelector("#sendStatusDetail"),
   inlineSendStatus: document.querySelector("#inlineSendStatus"),
   dismissStatusBtn: document.querySelector("#dismissStatusBtn"),
+  lensHistoryBtn: document.querySelector("#lensHistoryBtn"),
+  lensWorkspaceBtn: document.querySelector("#lensWorkspaceBtn"),
+  lensSettingsBtn: document.querySelector("#lensSettingsBtn"),
   activeProviderButton: document.querySelector("#activeProviderButton"),
   activeModelButton: document.querySelector("#activeModelButton"),
   thinkingButton: document.querySelector("#thinkingButton"),
@@ -752,12 +820,17 @@ const els = {
   systemPromptInput: document.querySelector("#systemPromptInput"),
   toolSettingsFeedback: document.querySelector("#toolSettingsFeedback"),
   temperatureInput: document.querySelector("#temperatureInput"),
+  modelThinkingSelect: document.querySelector("#modelThinkingSelect"),
+  performanceModeToggle: document.querySelector("#performanceModeToggle"),
+  lensThemeToggle: document.querySelector("#lensThemeToggle"),
   maxTokensInput: document.querySelector("#maxTokensInput"),
   agentToolsToggle: document.querySelector("#agentToolsToggle"),
   externalReadToggle: document.querySelector("#externalReadToggle"),
   externalPathsInput: document.querySelector("#externalPathsInput"),
   selectExternalPathsBtn: document.querySelector("#selectExternalPathsBtn"),
   environmentBtn: document.querySelector("#environmentBtn"),
+  environmentMirrorCheck: document.querySelector("#environmentMirrorCheck"),
+  environmentModalMirrorCheck: document.querySelector("#environmentModalMirrorCheck"),
   environmentModal: document.querySelector("#environmentModal"),
   closeEnvironmentBtn: document.querySelector("#closeEnvironmentBtn"),
   environmentNoPromptCheck: document.querySelector("#environmentNoPromptCheck"),
@@ -1154,21 +1227,19 @@ function openAICompatibleSupportsImageInput(provider = {}, model = "") {
   if (providerText.includes("api.openai.com")) return /gpt-4o|gpt-4\.1|gpt-5|o3|o4/.test(String(model).toLowerCase());
   if (providerText.includes("dashscope") || providerText.includes("qwen") || providerText.includes("百炼")) {
     if (/^qwen3-coder|^qwen-coder|coder/.test(normalizedModel)) return false;
-    if (/^qwen3\.(7|6|5)-(max|plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen3-vl-(plus|flash)(-|$)/.test(normalizedModel)) return true;
     if (/^qwen-vl|^qvq|omni/.test(normalizedModel)) return true;
   }
   if (providerText.includes("moonshot") || providerText.includes("kimi")) {
-    if (/^kimi-k2\.(6|5)(-|$)/.test(normalizedModel)) return true;
     if (/^moonshot-v1-(8k|32k|128k)-vision-preview$/.test(normalizedModel)) return true;
   }
   if (providerText.includes("api.x.ai") || providerText.includes("xai") || providerText.includes("grok")) {
-    return /^grok-(4\.3|build-0\.1)(-|$)/.test(normalizedModel);
+    return /vision|image|vl|omni/.test(normalizedModel);
   }
   if (providerText.includes("mistral")) {
-    return /^mistral-(medium-3-5|large-2512|small-2603)(-|$)/.test(normalizedModel);
+    return /vision|pixtral|vl|omni/.test(normalizedModel);
   }
-  return /vision|vl|omni|multimodal|llava/.test(providerText);
+  return /vision|vl|omni|multimodal|llava|pixtral/.test(providerText);
 }
 
 function providerSupportsImageInput(provider = activeProvider(), model = state.activeModel) {
@@ -1317,7 +1388,9 @@ function defaultState() {
     visionRouteModel: defaultModelRouting.visionModel,
     thinking: "balanced",
     temperature: 0.7,
-    maxTokens: 2048,
+    maxTokens: 8192,
+    performanceMode: false,
+    lensTheme: "dark",
     agentTools: false,
     toolConsent: structuredClone(defaultToolConsent),
     agentName: "neo",
@@ -1327,6 +1400,7 @@ function defaultState() {
     appearance: structuredClone(defaultAppearance),
     appearancePreset: appearancePresetId,
     historyCollapsed: false,
+    uiMode: "",
     sidebarOpen: true,
     workspaceOpen: true,
     workspaceTab: "tasks",
@@ -1372,7 +1446,9 @@ function normalizeToolConsent(value = {}) {
     externalPaths,
     web: input.web === true,
     desktop: input.desktop === true,
-    command: input.command === true
+    command: input.command === true,
+    systemControl: input.systemControl === true,
+    screenView: input.screenView === true
   };
 }
 
@@ -1453,6 +1529,8 @@ function consentForSkillIds(skillIds = []) {
       if (webToolNames.has(toolName)) next.web = true;
       if (desktopToolNames.has(toolName)) next.desktop = true;
       if (toolName === "run_command") next.command = true;
+      if (toolName === "run_automation_script") next.systemControl = true;
+      if (toolName === "screen_capture") next.screenView = true;
     }
   }
   return next;
@@ -1469,6 +1547,8 @@ function isToolNameAllowedByConsent(toolName, consent = toolConsentForChat()) {
   if (webToolNames.has(toolName)) required.push("web");
   if (desktopToolNames.has(toolName)) required.push("desktop");
   if (toolName === "run_command") required.push("command");
+  if (toolName === "run_automation_script") required.push("systemControl");
+  if (toolName === "screen_capture") required.push("screenView");
   if (!required.length) return false;
   return required.every((key) => consent[key] === true);
 }
@@ -1483,6 +1563,8 @@ function confirmToolConsent(nextConsent) {
   if (next.web) scopes.push("访问网页");
   if (next.desktop) scopes.push("打开本地应用、网页或文件");
   if (next.command) scopes.push("运行本地命令");
+  if (next.systemControl) scopes.push("运行系统/软件设置脚本（每条仍需单独确认）");
+  if (next.screenView) scopes.push("截取屏幕画面并发送给所选模型供应商（你的屏幕内容会离开本机）");
   return window.confirm(`开启本地工具后，模型可在授权范围内操作：\n\n${scopes.join("\n")}\n\n高风险操作仍建议你在聊天里明确确认。`);
 }
 
@@ -1654,19 +1736,34 @@ function normalizeAppearance(appearance = {}) {
   };
 }
 
+// petdex.crafter.run 已迁移到 petdex.dev，存档里旧域名的资产地址已失效，清掉让 slug 兜底
+function stripStalePetdexUrl(value) {
+  const url = String(value || "").trim();
+  return url.includes("petdex.crafter.run") ? "" : url;
+}
+
 function normalizePetdexPetSelection(value, fallbackSlug = "") {
   const slug = String(value?.slug || fallbackSlug || "").trim();
   if (!slug) return null;
-  const spritesheetUrl = String(value?.spritesheetUrl || "").trim();
   return {
     slug,
     displayName: String(value?.displayName || value?.name || slug).trim(),
     kind: String(value?.kind || "").trim(),
     submittedBy: String(value?.submittedBy || "").trim(),
-    spritesheetUrl,
-    petJsonUrl: String(value?.petJsonUrl || "").trim(),
-    zipUrl: String(value?.zipUrl || "").trim()
+    spritesheetUrl: stripStalePetdexUrl(value?.spritesheetUrl),
+    petJsonUrl: stripStalePetdexUrl(value?.petJsonUrl),
+    zipUrl: stripStalePetdexUrl(value?.zipUrl)
   };
+}
+
+// 旧版本默认最大输出 2048，思考模型（如 kimi-k2.6）容易把额度全耗在思考上导致正文为空。
+// 保存值还是旧默认 2048 时升级到新默认；0（不限制）和其他自定义值保持不变。
+function normalizeMaxTokens(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return fallback;
+  if (num === 2048) return fallback;
+  return num;
 }
 
 function normalizeSavedState(saved = {}) {
@@ -1693,7 +1790,7 @@ function normalizeSavedState(saved = {}) {
       historyCollapsed: Boolean(saved.historyCollapsed),
       sidebarOpen: saved.sidebarOpen !== false,
       workspaceOpen: saved.workspaceOpen !== false,
-      workspaceTab: ["tasks", "artifacts", "files", "terminal"].includes(saved.workspaceTab) ? saved.workspaceTab : "tasks",
+      workspaceTab: ["tasks", "artifacts", "files", "terminal", "audit"].includes(saved.workspaceTab) ? saved.workspaceTab : "tasks",
       schedulePanelOpen: Boolean(saved.schedulePanelOpen),
       workspacePath: saved.workspacePath || ".",
       onboardingComplete: Boolean(saved.onboardingComplete || localStorage.getItem(onboardingStorageKey) === "1"),
@@ -1717,6 +1814,9 @@ function normalizeSavedState(saved = {}) {
       artifacts: Array.isArray(saved.artifacts) ? saved.artifacts.slice(0, 80) : [],
       currentFile: saved.currentFile || null,
       thinking: saved.thinking || "balanced",
+      maxTokens: normalizeMaxTokens(saved.maxTokens, base.maxTokens),
+      performanceMode: Boolean(saved.performanceMode),
+      lensTheme: saved.lensTheme === "light" ? "light" : "dark",
       layout: {
         sidebarWidth: clamp(Number(saved.layout?.sidebarWidth || saved.sidebarWidth || 300), 220, 430),
         rightWidth: clamp(Number(saved.layout?.rightWidth || saved.rightWidth || 300), 260, 440)
@@ -1743,6 +1843,8 @@ function migrateConversations(saved) {
       id: conversation.id || id("chat"),
       title: conversation.title || titleFromMessages(conversation.messages || []),
       messages: Array.isArray(conversation.messages) ? conversation.messages : [],
+      summary: typeof conversation.summary === "string" ? conversation.summary : "",
+      summarizedUntil: Number.isInteger(conversation.summarizedUntil) && conversation.summarizedUntil > 0 ? conversation.summarizedUntil : 0,
       createdAt: conversation.createdAt || nowIso(),
       updatedAt: conversation.updatedAt || conversation.createdAt || nowIso()
     }));
@@ -1943,15 +2045,19 @@ function trimStateForStorage(stateObj) {
   return trimmed;
 }
 
-function saveState() {
+function writeStateToStorage() {
   let serialized = JSON.stringify(state);
-  const size = new Blob([serialized]).size;
-  if (size > STORAGE_HARD_BYTES) {
-    const trimmed = trimStateForStorage(state);
-    serialized = JSON.stringify(trimmed);
-    console.warn(`[neo] localStorage 超过 ${(STORAGE_HARD_BYTES / 1024 / 1024).toFixed(1)}MB，已自动截断旧对话。当前对话数：${trimmed.conversations.length}`);
-  } else if (size > STORAGE_WARN_BYTES) {
-    console.warn(`[neo] localStorage 已使用 ${(size / 1024 / 1024).toFixed(1)}MB，接近上限。`);
+  // UTF-8 字节数最多是 UTF-16 码元数的 3 倍：长度 ×3 仍不到警告线时必然安全，
+  // 跳过 Blob 精确测量（大存档时每次要 1-2ms，且 saveState 调用频繁）
+  if (serialized.length * 3 > STORAGE_WARN_BYTES) {
+    const size = new Blob([serialized]).size;
+    if (size > STORAGE_HARD_BYTES) {
+      const trimmed = trimStateForStorage(state);
+      serialized = JSON.stringify(trimmed);
+      console.warn(`[neo] localStorage 超过 ${(STORAGE_HARD_BYTES / 1024 / 1024).toFixed(1)}MB，已自动截断旧对话。当前对话数：${trimmed.conversations.length}`);
+    } else if (size > STORAGE_WARN_BYTES) {
+      console.warn(`[neo] localStorage 已使用 ${(size / 1024 / 1024).toFixed(1)}MB，接近上限。`);
+    }
   }
   try {
     localStorage.setItem(storageKey, serialized);
@@ -1961,6 +2067,28 @@ function saveState() {
   }
   queueAppStateSave();
 }
+
+// 连续操作（流式回复、批量任务事件）会密集触发保存：200ms 内合并成一次全量序列化
+let saveStateTimer = 0;
+
+function saveState() {
+  window.clearTimeout(saveStateTimer);
+  saveStateTimer = window.setTimeout(() => {
+    saveStateTimer = 0;
+    writeStateToStorage();
+  }, 200);
+}
+
+/** 立即落盘还在防抖中的保存（关闭/刷新前调用，防丢数据） */
+function flushSaveState() {
+  if (!saveStateTimer) return;
+  window.clearTimeout(saveStateTimer);
+  saveStateTimer = 0;
+  writeStateToStorage();
+}
+
+window.addEventListener("pagehide", flushSaveState);
+window.addEventListener("beforeunload", flushSaveState);
 
 function queueAppStateSave() {
   if (!appStateReady) return;
@@ -2186,7 +2314,8 @@ function hasImageAttachment(attachments = []) {
 }
 
 function resolveModelRoute(attachments = []) {
-  if (!state.autoModelRouting) {
+  const hasImages = hasImageAttachment(attachments);
+  if (!state.autoModelRouting || !hasImages) {
     return {
       provider: activeProvider(),
       model: effectiveModel(),
@@ -2196,7 +2325,7 @@ function resolveModelRoute(attachments = []) {
     };
   }
 
-  const kind = hasImageAttachment(attachments) ? "vision" : "text";
+  const kind = "vision";
   const provider = routeProvider(kind);
   const model = routeModel(kind);
   return {
@@ -2232,6 +2361,19 @@ function memoryQueryTokens(query = "") {
     .slice(0, 80);
 }
 
+function normalizeWorkspaceKey(value = "") {
+  return String(value || "").replace(/\\/g, "/").replace(/\/+$/, "").trim().toLowerCase();
+}
+
+// 工作区范围的记忆只属于创建它的那个工作区：scope==="workspace" 时，
+// 仅当 memory.project 与当前工作区一致才视为匹配；未选工作区时一律不匹配。
+function memoryMatchesWorkspace(memory) {
+  if (!memory || memory.scope !== "workspace") return true;
+  const current = normalizeWorkspaceKey(state.workspaceRoot);
+  if (!current) return false;
+  return normalizeWorkspaceKey(memory.project) === current;
+}
+
 function memoryIntentBoost(memory, query = "") {
   const text = String(query).toLowerCase();
   let score = 0;
@@ -2239,7 +2381,7 @@ function memoryIntentBoost(memory, query = "") {
   if (/文件|目录|路径|工作区|项目|代码/.test(text) && ["project", "file", "tool"].includes(memory.type)) score += 5;
   if (/风格|语气|称呼|偏好|喜欢|默认|以后|每次/.test(text) && memory.type === "preference") score += 6;
   if (/怎么做|工具|调用|命令|自动化|python/.test(text) && memory.type === "tool") score += 5;
-  if (state.workspaceRoot && memory.scope === "workspace") score += 3;
+  if (memory.scope === "workspace" && memoryMatchesWorkspace(memory)) score += 3;
   return score;
 }
 
@@ -2263,7 +2405,9 @@ function scoreMemory(memory, query = "") {
 }
 
 function selectRelevantMemories(query = "", limit = memoryInjectionLimit) {
-  const activeMemories = normalizeMemories(state.memories || []).filter((memory) => memory.status === "active");
+  const activeMemories = normalizeMemories(state.memories || [])
+    .filter((memory) => memory.status === "active")
+    .filter(memoryMatchesWorkspace);
   if (!activeMemories.length) return [];
   const scored = activeMemories
     .map((memory) => ({ memory, score: scoreMemory(memory, query) }))
@@ -2298,8 +2442,52 @@ function memoryPromptText(query = "", selectedMemories = null) {
 }
 
 function conversationSummaryPromptText(conversation = activeConversation()) {
-  if (!conversation?.summary || conversation.messages.length < 12) return "";
-  return `当前对话摘要：${conversation.summary}`;
+  if (!conversation?.summary) return "";
+  if (conversation.messages.length < 12 && !conversation.summarizedUntil) return "";
+  return `当前对话摘要（更早的对话已压缩，其中的目标、结论和文件路径仍然有效）：${conversation.summary}`;
+}
+
+// ── 对话自动压缩 ─────────────────────────────────────────────────────────────
+// 发送前估算未压缩消息的总字符量，超过阈值时把较早轮次压缩成摘要，
+// 摘要通过 conversationSummaryPromptText 注入系统提示词，原消息不再随历史发送。
+const conversationCompressThresholdChars = 48000;
+const conversationCompressKeepMessages = 8;
+
+async function maybeCompressConversation(conversation, provider, model) {
+  if (!conversation) return;
+  const start = conversation.summarizedUntil || 0;
+  const active = conversation.messages.slice(start);
+  if (active.length <= conversationCompressKeepMessages) return;
+  const totalChars = active.reduce((sum, message) => sum + String(message.content || "").length, 0);
+  if (totalChars < conversationCompressThresholdChars) return;
+  const cutCount = active.length - conversationCompressKeepMessages;
+  const toCompress = active.slice(0, cutCount).filter((message) => ["user", "assistant"].includes(message.role));
+  if (!toCompress.length) return;
+  const transcript = toCompress
+    .map((message) => `${message.role === "user" ? "用户" : "neo"}：${String(message.content || "").slice(0, 2000)}`)
+    .join("\n\n");
+  const summaryPrompt = [
+    conversation.summary ? `已有摘要（请合并进新摘要）：\n${conversation.summary}\n` : "",
+    "请把下面的对话内容压缩成简洁的中文摘要，必须保留：用户的目标、已确认的结论、已生成或修改的文件路径、尚未完成的待办。直接输出摘要正文，不要任何前缀或解释。",
+    "",
+    transcript
+  ].filter(Boolean).join("\n");
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, model, messages: [{ role: "user", content: summaryPrompt }], temperature: 0.3, stream: false })
+    });
+    const data = await response.json();
+    const summary = String(data?.content || "").trim();
+    if (!response.ok || !summary) return;
+    conversation.summary = summary.slice(0, 4000);
+    conversation.summarizedUntil = start + cutCount;
+    saveState();
+    addTaskEvent("已压缩早期对话", `${cutCount} 条较早消息已合并为摘要，要点仍会随系统提示注入`, "complete", { persist: false, open: false });
+  } catch {
+    // 压缩失败时按原始历史发送，不影响本轮请求
+  }
 }
 
 function enabledSkillItems() {
@@ -2359,6 +2547,15 @@ function localToolPromptText() {
   if (tools.includes("read_excel_file")) {
     notes.push("当用户要求读取或分析 Excel/CSV 文件时，优先调用 inspect_office_file 或 read_excel_file。");
   }
+  if (tools.includes("check_table")) {
+    notes.push("当用户怀疑表格脏、要求体检/检查数据质量，或在清洗/分析前需要先了解问题时，调用 check_table 得到逐列缺失率、类型一致性、重复行、异常值和日期格式问题；它返回的 markdown 可直接交给 write_file/create_pdf_file 存成报告。");
+  }
+  if (tools.includes("chart_from_table")) {
+    notes.push("当用户要把表格数据可视化（趋势、对比、占比、画图/图表）时，调用 chart_from_table：选标签列和数值列、指定 type（line/bar/pie）；默认输出带文字、可缩放的 SVG 到工作区 charts/ 目录，用户要能直接贴进文档/聊天的位图时再指定 .png；不要让用户自己画。");
+  }
+  if (tools.includes("pivot_table")) {
+    notes.push("当用户要按维度汇总/小计/透视（如\"按部门按月求和\"\"各地区订单数\"\"汇总合计\"）时，调用 pivot_table：用 group_by 指定分组维度、values 指定要汇总的数值列、agg 选 sum/avg/count/min/max；要做交叉表（行×列）时再设 pivot_column；结果默认另存 .xlsx 到工作区 pivots/ 目录。");
+  }
   if (tools.includes("inspect_office_file")) {
     notes.push("处理 Excel、CSV、Word、PDF、PPT 附件时，先查看附件 path 和摘要；需要完整结构时调用 inspect_office_file，并根据 officeTask 的失败步骤说明未完成原因。");
   }
@@ -2374,7 +2571,11 @@ function localToolPromptText() {
   if (tools.includes("run_command")) {
     notes.push("本地命令工具的真实名称是 run_command；不要输出 run_local_command、DSML、tool_calls 或 invoke 标记给用户看。生成文件时优先使用专用文件工具，除非用户明确要求运行命令。");
   }
-  if (tools.some((toolName) => ["write_file", "export_image", "create_excel_file", "create_word_file", "create_ppt_file", "clean_table_file", "clean_table_files"].includes(toolName))) {
+  if (tools.includes("edit_file")) {
+    notes.push("修改已有文本文件时优先调用 edit_file 做局部替换（old_text 必须与文件内容完全一致且唯一），不要用 write_file 全量重写大文件。");
+  }
+  notes.push("任务计划：超过 2 步的任务，先调用 update_plan 列出完整步骤计划，之后每完成一步就再次调用 update_plan 更新状态（每次都发送完整计划，最多一个步骤处于 in_progress）。计划会实时展示给用户。");
+  if (tools.some((toolName) => ["write_file", "edit_file", "export_image", "create_excel_file", "create_word_file", "create_ppt_file", "clean_table_file", "clean_table_files"].includes(toolName))) {
     notes.push("当你生成、清洗或修改文件后，在回复最后用一句话列出文件路径，方便 neo 放进成果区。");
     notes.push("只有本轮工具结果返回 ok:true 且输出文件通过验证后，才能说“已保存/已导出/已创建”。如果工具失败或没有回执，必须如实说未完成。");
   }
@@ -2386,19 +2587,73 @@ function localToolPromptText() {
   ].join("\n");
 }
 
+let workspaceInstructionsCache = { content: "", source: "", fetchedAt: 0 };
+
+async function refreshWorkspaceInstructions() {
+  if (Date.now() - workspaceInstructionsCache.fetchedAt < 15000) return;
+  try {
+    const res = await fetch("/api/workspace/instructions");
+    const data = await res.json();
+    workspaceInstructionsCache = { content: String(data?.content || ""), source: String(data?.source || ""), fetchedAt: Date.now() };
+  } catch {
+    workspaceInstructionsCache = { ...workspaceInstructionsCache, fetchedAt: Date.now() };
+  }
+}
+
+function workspaceInstructionsPromptText() {
+  if (!workspaceInstructionsCache.content.trim()) return "";
+  return [
+    `工作区项目指令（来自工作区根目录的 ${workspaceInstructionsCache.source}，在不违反安全和权限规则的前提下优先遵守）：`,
+    workspaceInstructionsCache.content.trim()
+  ].join("\n");
+}
+
+function detectClientOS() {
+  const platform = String(navigator.platform || "").toLowerCase();
+  const ua = String(navigator.userAgent || "").toLowerCase();
+  if (platform.includes("mac") || ua.includes("mac os")) return "macOS";
+  if (platform.includes("win") || ua.includes("windows")) return "Windows";
+  if (platform.includes("linux") || ua.includes("linux")) return "Linux";
+  return "未知系统";
+}
+
+function environmentPromptText() {
+  const consent = toolConsentForChat();
+  const groups = [
+    ["fileRead", "文件读取"],
+    ["fileWrite", "文件写入"],
+    ["web", "网页访问"],
+    ["desktop", "桌面操作"],
+    ["command", "本地命令"]
+  ];
+  const enabled = state.agentTools ? groups.filter(([key]) => consent[key] === true).map(([, label]) => label) : [];
+  const lines = [
+    "环境信息：",
+    `- 操作系统：${detectClientOS()}`,
+    `- 今天日期：${new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}`,
+    state.workspaceRoot ? `- 工作区根目录：${state.workspaceRoot}（你的文件操作都以此为边界）` : "- 工作区：尚未选择文件夹",
+    `- 已授权能力：${enabled.length ? enabled.join("、") : "无（本地工具未开启）"}`
+  ];
+  return lines.join("\n");
+}
+
 function buildSystemPrompt(provider, model, memoryQuery = "", selectedMemories = null) {
   const thinking = thinkingOptions[state.thinking] || thinkingOptions.balanced;
   return [
+    `你就是 neo，一个常驻用户电脑的本地智能体。始终以 neo 的第一人称身份与用户交流；已启用的本地工具（文件、表格、网页、命令等）就是你自己的能力。不要把自己描述成"跑在 neo 里的助手"或与 neo 切割身份。`,
+    environmentPromptText(),
     `运行时上下文：neo 正在通过「${provider.name || '未命名供应商'}」调用模型「${model}」。`,
     `运行时上下文优先级最高：即使历史消息、旧回复或自定义提示提到其他供应商/模型，也必须以本次运行时上下文为准。`,
     `当前思考强度：${thinking.label}。${thinking.prompt}`,
-    `当用户询问"你是什么模型""调用了哪个 API""当前模型是什么"时，必须直接说明当前供应商和模型，不要只回答 neo。neo 是桌面应用外壳，不是底层模型名称。`,
+    `除非用户明确询问模型、API 或供应商，不要在普通回复里主动介绍当前供应商、模型名或调用方式。`,
+    `当用户明确询问"你是什么模型""调用了哪个 API""当前模型是什么"时，如实说明当前供应商和模型，不要只回答 neo——neo 是你的身份和产品名，底层模型是可切换的。除这种明确询问外，你的身份始终是 neo。`,
     `工具调用真实性：只有 neo 工具事件返回成功才算已执行。禁止在回复正文中输出 DSML、tool_calls、invoke、run_local_command 等伪工具调用；如果没有本轮真实工具回执，不要声称已经创建、保存、导出或运行。文件任务必须以工具结果和文件验证为准。`,
     `文件处理：当用户消息中出现 <attachment name="..." path="...">...</attachment> 标签时，说明文件已经被 neo 保存到本地工作区。标签内会包含文件名、工作区相对路径、解析摘要和内容预览。你可以直接根据这些内容回答，不要说"无法访问本地文件"。如果需要更完整内容，Excel/CSV/Word/PDF/PPT 优先调用 inspect_office_file，表格也可调用 read_excel_file。图片附件在模型支持多模态时会同时包含图片数据。`,
     state.agentTools ? localToolPromptText() : "",
     enabledSkillPromptText(),
     conversationSummaryPromptText(),
     memoryPromptText(memoryQuery, selectedMemories),
+    workspaceInstructionsPromptText(),
     state.systemPrompt || ""
   ]
     .filter(Boolean)
@@ -2423,8 +2678,10 @@ function renderAll() {
 }
 
 function applyLayout() {
-  const compactSidebar = window.matchMedia("(max-width: 680px)").matches;
-  const compactWorkspace = window.matchMedia("(max-width: 900px)").matches;
+  // lens 模式下面板是浮层而不是挤压三栏布局，不受窄窗口紧凑模式限制
+  const lensMode = document.body.classList.contains("neo-lens-mode");
+  const compactSidebar = !lensMode && window.matchMedia("(max-width: 680px)").matches;
+  const compactWorkspace = !lensMode && window.matchMedia("(max-width: 900px)").matches;
   const sidebarWidth = compactSidebar ? 64 : state.layout.sidebarWidth;
   const showSidebar = state.sidebarOpen !== false;
   const showWorkspace = state.workspaceOpen && !compactWorkspace;
@@ -2440,6 +2697,10 @@ function applyLayout() {
   els.sidebarToggleBtn?.setAttribute("aria-label", showSidebar ? "收起左侧栏" : "展开左侧栏");
   els.workspaceToggleBtn?.classList.toggle("active", state.workspaceOpen);
   els.workspaceToggleBtn?.setAttribute("aria-pressed", String(state.workspaceOpen));
+  els.lensHistoryBtn?.classList.toggle("active", showSidebar);
+  els.lensWorkspaceBtn?.classList.toggle("active", state.workspaceOpen);
+  els.lensHistoryBtn?.setAttribute("aria-pressed", String(showSidebar));
+  els.lensWorkspaceBtn?.setAttribute("aria-pressed", String(state.workspaceOpen));
   if (!document.body.classList.contains("layout-ready")) {
     requestAnimationFrame(() => document.body.classList.add("layout-ready"));
   }
@@ -2562,14 +2823,35 @@ function toggleHistory() {
   renderHistoryState();
 }
 
-function renderMessages() {
-  const messages = activeConversation().messages;
-  const workspaceCard = document.querySelector(".workspace-card");
+// 增量渲染缓存：记录上次渲染的对话和消息对象引用，避免每轮全量重建 DOM
+// （300 条消息全量重建实测 ~110ms，增量追加 <1ms）
+const messageRenderCache = { convId: "", refs: [] };
+
+function renderMessages(options = {}) {
+  const conversation = activeConversation();
+  const messages = conversation.messages;
+  const workspaceCard = els.workspaceCard || document.querySelector(".workspace-card");
   workspaceCard.classList.toggle("empty", messages.length === 0);
   workspaceCard.classList.toggle("has-messages", messages.length > 0);
   els.heroBlock.classList.toggle("hidden", messages.length > 0);
-  els.messageList.innerHTML = "";
-  for (const message of messages) appendMessageElement(message);
+
+  const cache = messageRenderCache;
+  const incremental = !options.force
+    && cache.convId === conversation.id
+    && els.messageList.children.length === cache.refs.length;
+
+  if (incremental) {
+    // 找到与上次渲染一致的公共前缀，截掉尾部失效节点（如流式占位），再补新增消息
+    let common = 0;
+    while (common < cache.refs.length && common < messages.length && cache.refs[common] === messages[common]) common++;
+    while (els.messageList.children.length > common) els.messageList.lastElementChild.remove();
+    for (let i = common; i < messages.length; i++) appendMessageElement(messages[i]);
+  } else {
+    els.messageList.innerHTML = "";
+    for (const message of messages) appendMessageElement(message);
+  }
+  cache.convId = conversation.id;
+  cache.refs = messages.slice();
   els.messageList.scrollTop = els.messageList.scrollHeight;
 }
 
@@ -2685,11 +2967,36 @@ function quoteMessage(messageIndex) {
   });
 }
 
+function userAskedForModelDetails(value = "") {
+  return /什么模型|哪个模型|当前模型|底层模型|模型是什么|你.*模型|供应商|调用.*API|API.*调用|provider|model/i.test(String(value || ""));
+}
+
+function stripUnrequestedModelIntro(value = "") {
+  return String(value || "")
+    .replace(
+      /([，,]\s*)?(?:我)?(?:当前|现在)?(?:正?在)?通过[「“"]?[^，。！？\n]{1,60}[」”"]?\s*调用[「“"]?[^，。！？\n]{1,90}[」”"]?\s*(?:模型|model)[。.!！]?/giu,
+      (_, lead) => lead ? "。" : ""
+    )
+    .replace(
+      /([，,]\s*)?(?:我)?(?:当前|现在)?(?:使用|调用的是|调用的?是)[「“"]?[^，。！？\n]{1,90}[」”"]?\s*(?:模型|model)[。.!！]?/giu,
+      (_, lead) => lead ? "。" : ""
+    )
+    .replace(/。{2,}/g, "。")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function assistantDisplayContent(message, messages = [], messageIndex = -1) {
+  const content = cleanVisibleText(message.content || "");
+  const previousUser = [...messages.slice(0, Math.max(0, messageIndex))].reverse().find((item) => item.role === "user");
+  return userAskedForModelDetails(previousUser?.content) ? content : stripUnrequestedModelIntro(content);
+}
+
 function appendMessageElement(message) {
   const role = message.role;
   const wrapper = document.createElement("article");
   wrapper.className = `message ${role}`;
-  const requestLine = message.request ? requestModelText(message.request) : "";
+  const requestLine = "";
   const attachmentsHtml = messageAttachmentsHtml(message.attachments);
   const referencesHtml = messageReferencesHtml(message.references);
   const currentMessages = activeConversation().messages || [];
@@ -2701,7 +3008,7 @@ function appendMessageElement(message) {
   if (role === "assistant") {
     const agentLabel = state.agentName || "neo";
     if (message._streaming) wrapper.classList.add("_streaming");
-    const content = cleanVisibleText(message.content || "");
+    const content = assistantDisplayContent(message, currentMessages, messageIndex);
     const isStreaming = Boolean(message._streaming);
     const isWaitingForStream = isStreaming && !content.trim();
     const bubbleClass = `bubble${isStreaming && !isWaitingForStream ? " has-streamed-content" : ""}`;
@@ -2720,14 +3027,28 @@ function appendMessageElement(message) {
     `;
   } else {
     const label = role === "user" ? "你" : "错误";
+    const errorActions = role === "error"
+      ? '<div class="error-actions"><button class="ghost-button small error-retry-btn" type="button">重试</button><button class="ghost-button small error-switch-model-btn" type="button">换模型</button></div>'
+      : "";
     wrapper.innerHTML = `
       <div class="meta"><span>${label}</span>${quoteAction}</div>
       <div class="bubble">${escapeHtml(message.content || (message.attachments?.length ? "已发送附件" : ""))}</div>
+      ${errorActions}
       ${referencesHtml}
       ${attachmentsHtml}
       ${requestLine ? `<div class="request-meta">${escapeHtml(requestLine)}</div>` : ""}
     `;
   }
+  wrapper.querySelector(".error-retry-btn")?.addEventListener("click", () => {
+    rerunLastUserTask();
+    els.chatForm.requestSubmit();
+  });
+  wrapper.querySelector(".error-switch-model-btn")?.addEventListener("click", (event) => {
+    // 阻止本次点击继续冒泡到 document 的"点外部关闭"处理器，
+    // 否则下面合成点击刚打开模型选择器，就会被立刻关掉（表现为"点了没反应"）。
+    event.stopPropagation();
+    els.activeModelButton?.click();
+  });
   wrapper.querySelector(".message-quote-btn")?.addEventListener("click", (event) => {
     event.stopPropagation();
     quoteMessage(Number(event.currentTarget.dataset.messageIndex));
@@ -2742,12 +3063,13 @@ function renderProviderList() {
     button.type = "button";
     button.className = `provider-item${provider.id === state.selectedProviderId ? " active" : ""}`;
     const hasKey = Boolean(provider.apiKey || provider.protocol === "mock");
+    const keyStateText = provider.protocol === "mock" ? "本地" : provider.apiKey ? "已填 Key" : "缺少 Key";
     button.title = provider.baseUrl || provider.protocol || "";
     button.innerHTML = `
       <span class="provider-item-main">
         <strong>${escapeHtml(provider.name)}</strong>
       </span>
-      <span class="key-state${hasKey ? "" : " missing"}">${hasKey ? "可用" : "不可用"}</span>
+      <span class="key-state${hasKey ? "" : " missing"}">${keyStateText}</span>
     `;
     button.addEventListener("click", () => selectProviderForEditing(provider.id));
     els.providerList.append(button);
@@ -2821,10 +3143,9 @@ function modelSelectOptions(providerId, selectedModel, kind = "text") {
 }
 
 function routeSummaryText() {
-  const textProvider = routeProvider("text");
   const visionProvider = routeProvider("vision");
   return state.autoModelRouting
-    ? `文字/本地任务用 ${textProvider.name || "未命名"} · ${routeModel("text")}；图片任务用 ${visionProvider.name || "未命名"} · ${routeModel("vision")}`
+    ? `文字任务使用当前模型；图片任务用 ${visionProvider.name || "未命名"} · ${routeModel("vision")}`
     : "已关闭自动切换，发送时使用上方当前模型。";
 }
 
@@ -2839,7 +3160,6 @@ function compactEndpointText(provider = {}) {
 
 function renderModelSettingsSummary() {
   const provider = activeProvider();
-  const textProvider = routeProvider("text");
   const visionProvider = routeProvider("vision");
   const hasKey = Boolean(provider.apiKey || provider.protocol === "mock");
   const model = effectiveModel() || "未选择模型";
@@ -2849,18 +3169,18 @@ function renderModelSettingsSummary() {
   if (els.modelSettingsRouteSummary) {
     els.modelSettingsRouteSummary.textContent = state.autoModelRouting === false
       ? "所有请求使用当前模型"
-      : `文字 ${textProvider.name || "未命名"} / 图片 ${visionProvider.name || "未命名"}`;
+      : `文字用当前模型 / 图片 ${visionProvider.name || "未命名"}`;
   }
   if (els.modelSettingsKeyState) {
-    els.modelSettingsKeyState.textContent = provider.protocol === "mock" ? "本地演示" : hasKey ? "Key 已配置" : "缺少 API Key";
+    els.modelSettingsKeyState.textContent = provider.protocol === "mock" ? "本地演示" : hasKey ? "Key 已填写" : "缺少 API Key";
   }
   if (els.modelSettingsEndpoint) els.modelSettingsEndpoint.textContent = compactEndpointText(provider);
 }
 
 function renderRoutingControls() {
   if (!els.autoModelRoutingSelect) return;
-  const textProvider = routeProvider("text");
   const visionProvider = routeProvider("vision");
+  const textProvider = activeProvider();
   state.textRouteProviderId = textProvider.id;
   state.visionRouteProviderId = visionProvider.id;
   state.textRouteModel = routeModel("text");
@@ -2871,8 +3191,8 @@ function renderRoutingControls() {
   els.visionRouteProviderSelect.innerHTML = providerSelectOptions(state.visionRouteProviderId);
   els.textRouteModelSelect.innerHTML = modelSelectOptions(state.textRouteProviderId, state.textRouteModel, "text");
   els.visionRouteModelSelect.innerHTML = modelSelectOptions(state.visionRouteProviderId, state.visionRouteModel, "vision");
-  els.textRouteProviderSelect.disabled = !state.autoModelRouting;
-  els.textRouteModelSelect.disabled = !state.autoModelRouting;
+  els.textRouteProviderSelect.disabled = true;
+  els.textRouteModelSelect.disabled = true;
   els.visionRouteProviderSelect.disabled = !state.autoModelRouting;
   els.visionRouteModelSelect.disabled = !state.autoModelRouting;
   els.autoRouteHint.textContent = routeSummaryText();
@@ -2897,6 +3217,7 @@ function renderSelectors() {
   els.activeModelSelect.innerHTML = modelOptions;
   els.customModelInput.value = state.customModel;
   if (els.thinkingSelect) els.thinkingSelect.value = state.thinking;
+  if (els.modelThinkingSelect) els.modelThinkingSelect.value = state.thinking;
   els.activeProviderName.textContent = provider.name || "未命名";
   els.activeModelName.textContent = effectiveModel() || "未选择";
   if (els.activeThinkingName) els.activeThinkingName.textContent = thinkingOptions[state.thinking]?.label || "平衡";
@@ -2914,7 +3235,7 @@ function renderModelOverview() {
     card.innerHTML = `
       <div class="model-card-head">
         <strong>${escapeHtml(provider.name || "未命名")}</strong>
-        <span class="key-state${provider.apiKey || provider.protocol === "mock" ? "" : " missing"}">${provider.apiKey || provider.protocol === "mock" ? "Key 已配置" : "缺少 Key"}</span>
+        <span class="key-state${provider.apiKey || provider.protocol === "mock" ? "" : " missing"}">${provider.protocol === "mock" ? "本地演示" : provider.apiKey ? "Key 已填写" : "缺少 Key"}</span>
       </div>
       <div class="model-card-meta">${escapeHtml(provider.protocol || "openai")} · ${escapeHtml(apiModeLabel(provider))} · ${escapeHtml(provider.baseUrl || "local")} · ${models.length} 个模型</div>
       <div class="model-card-models">${escapeHtml(models.join("、") || "未配置模型")}</div>
@@ -3029,7 +3350,7 @@ function renderSkillLibrary() {
             <strong>${escapeHtml(skill.name)}</strong>
             <em>${escapeHtml(skill.recommendation)}</em>
           </span>
-          <span class="skill-meta">${escapeHtml(skill.category)} · ${escapeHtml((skill.tools || []).map(formatToolName).join("、") || "提示词")}</span>
+          <span class="skill-meta" title="${escapeAttr((skill.tools || []).map(formatToolName).join("、") || "提示词")}">${escapeHtml(skill.category)} · ${(skill.tools || []).length ? `${(skill.tools || []).length} 个工具` : "提示词"}</span>
           <span class="skill-summary">${escapeHtml(skill.summary)}</span>
         </span>
       </label>
@@ -3131,7 +3452,7 @@ function applyExternalAgentProfile(profile = {}) {
   draftAgentAvatar = state.agentAvatar;
   agentProfileDirty = false;
   saveState();
-  renderMessages();
+  renderMessages({ force: true });
   updateAvatarPreview(state.agentAvatar);
   if (agentNameInput) agentNameInput.value = state.agentName;
   setAgentProfileFeedback("已同步桌宠形象", "ok");
@@ -3172,7 +3493,7 @@ function saveAgentProfile() {
   state.agentAvatar = draftAgentAvatar || "";
   agentProfileDirty = false;
   saveState();
-  renderMessages();
+  renderMessages({ force: true });
   updateAvatarPreview(state.agentAvatar);
   broadcastAgentProfile("main");
   setAgentProfileFeedback("已保存", "ok");
@@ -3195,10 +3516,14 @@ function memoryScopeLabel(scope) {
 
 function memoryMetaHtml(memory) {
   const tags = normalizeMemoryTags(memory.tags || []);
+  const foreignWorkspace = memory.scope === "workspace" && !memoryMatchesWorkspace(memory)
+    ? `<span class="memory-pill" title="${escapeHtml(memory.project || "未记录工作区")}">其他工作区</span>`
+    : "";
   return `
     <div class="memory-meta">
       <span class="memory-pill">${escapeHtml(memoryTypeLabel(memory.type))}</span>
       <span class="memory-pill">${escapeHtml(memoryScopeLabel(memory.scope))}</span>
+      ${foreignWorkspace}
       <span class="memory-pill">${escapeHtml(memoryStatuses[memory.status] || "已启用")}</span>
       ${tags.map((tag) => `<span class="memory-pill">${escapeHtml(tag)}</span>`).join("")}
     </div>
@@ -3544,6 +3869,7 @@ function assistantContentFromResponse(data) {
     reason.finishReason ? `finish_reason: ${reason.finishReason}` : "",
     reason.hasToolCalls ? "返回里包含工具调用，但没有最终文本" : "",
     reason.hasReasoningContent ? "返回里包含 reasoning_content，但没有最终正文" : "",
+    reason.hasReasoningContent && reason.finishReason === "length" ? "通常是思考内容耗尽了最大输出额度，可调大最大输出或切到非深度思考。" : "",
     Array.isArray(reason.messageKeys) && reason.messageKeys.length ? `message 字段: ${reason.messageKeys.join(", ")}` : ""
   ].filter(Boolean);
   return [
@@ -3600,6 +3926,70 @@ function renderInlineMarkdown(value = "") {
     .replace(/(^|[\s(（])_([^_\n]+)_(?=[\s).,!?;:，。！？；：）]|$)/g, "$1<em>$2</em>");
   for (const [token, tokenHtml] of tokens) html = html.replaceAll(token, tokenHtml);
   return html;
+}
+
+// 平滑流式渲染：把突发到达的网络分片缓冲起来，用 rAF 以稳定节奏逐字揭示，
+// 并节流 markdown 渲染、智能跟随滚动、显示打字光标——避免逐分片全量重渲染造成的卡顿与跳动。
+const STREAM_CHARS_PER_SEC = 240;
+const STREAM_TICK_MS = 33; // 约 30fps；用 setTimeout 而非 rAF，保证窗口在后台时流式也不会被暂停
+function createStreamTyper(bubble) {
+  let pending = "";
+  let shown = "";
+  let timer = 0;
+  let finished = false;
+  let lastTick = 0;
+  let settleResolve = null;
+
+  function paint() {
+    if (!shown.trim()) return;
+    const el = els.messageList;
+    const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+    bubble.innerHTML = renderAssistantMarkdown(shown, { trim: false });
+    bubble.classList.add("has-streamed-content");
+    if (!finished || pending.length) {
+      const caret = document.createElement("span");
+      caret.className = "stream-caret";
+      caret.setAttribute("aria-hidden", "true");
+      (bubble.lastElementChild || bubble).appendChild(caret);
+    }
+    if (wasNearBottom) el.scrollTop = el.scrollHeight;
+  }
+
+  function tick() {
+    const now = performance.now();
+    const dt = lastTick ? Math.min(0.1, (now - lastTick) / 1000) : STREAM_TICK_MS / 1000;
+    lastTick = now;
+    if (pending.length) {
+      // 基础速度 + 按积压量加速，既平滑又不会落后太多
+      const rate = STREAM_CHARS_PER_SEC + pending.length * 3;
+      const n = Math.min(pending.length, Math.max(1, Math.floor(rate * dt)));
+      shown += pending.slice(0, n);
+      pending = pending.slice(n);
+      paint();
+    }
+    if (finished && !pending.length) {
+      paint();
+      timer = 0;
+      if (settleResolve) { settleResolve(); settleResolve = null; }
+      return;
+    }
+    timer = window.setTimeout(tick, STREAM_TICK_MS);
+  }
+
+  function ensureRunning() { if (!timer) { lastTick = 0; timer = window.setTimeout(tick, 0); } }
+
+  return {
+    push(text) { if (!text) return; pending += text; ensureRunning(); },
+    finish() { finished = true; ensureRunning(); },
+    whenSettled(maxMs = 400) {
+      if (!pending.length) return Promise.resolve();
+      return new Promise((resolve) => {
+        settleResolve = resolve;
+        window.setTimeout(() => { if (settleResolve) { settleResolve = null; resolve(); } }, maxMs);
+      });
+    },
+    cancel() { if (timer) clearTimeout(timer); timer = 0; if (settleResolve) { settleResolve(); settleResolve = null; } }
+  };
 }
 
 function renderAssistantMarkdown(value = "", options = {}) {
@@ -3798,14 +4188,80 @@ function buildRequestMessages(conversation, prompt, importedAttachments, provide
   }
   const messages = [
     { role: "system", content: buildSystemPrompt(provider, model, memoryQuery, selectedMemories) },
-    ...messagesForModel(conversation.messages, provider, model).slice(-24)
+    ...messagesForModel(conversation.messages.slice(conversation.summarizedUntil || 0), provider, model).slice(-24)
   ];
   return messages;
 }
 
 /** 调用 /api/chat 并返回 data */
 /** SSE 流式调用 /api/chat，边接收边更新气泡，返回最终 data 对象 */
-async function callChatApi(provider, model, messages, { onDelta, onToolStart, onToolEnd, onSkillStart, onSkillStep, onSkillEnd, onPseudoToolBlocked, onUnverifiedCompletionBlocked, onToolArgFuse } = {}) {
+// run_command 单次审批：会话级"全部允许"集合（运行时状态，不持久化）
+const commandAllowAllConversations = new Set();
+let activeCommandConfirmBar = null;
+
+async function postCommandConfirm(id, approved) {
+  try {
+    await fetch("/api/command-confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, approved })
+    });
+  } catch { /* 服务端超时兜底会自动拒绝 */ }
+}
+
+function hideCommandConfirmBar(id = null) {
+  if (!activeCommandConfirmBar) return;
+  if (id && activeCommandConfirmBar.dataset.confirmId !== id) return;
+  activeCommandConfirmBar.remove();
+  activeCommandConfirmBar = null;
+}
+
+function showCommandConfirmBar(id, command, meta = null) {
+  const conversationId = activeConversation()?.id || "";
+  if (conversationId && commandAllowAllConversations.has(conversationId)) {
+    postCommandConfirm(id, true);
+    addTaskEvent("命令已自动允许", command.slice(0, 120), "running", { persist: false });
+    return;
+  }
+  hideCommandConfirmBar();
+  const isAutomation = meta && meta.kind === "automation";
+  const langLabel = { applescript: "AppleScript", powershell: "PowerShell", shell: "Shell" }[meta?.language] || meta?.language || "";
+  const bar = document.createElement("div");
+  bar.className = "command-confirm-bar";
+  bar.dataset.confirmId = id;
+  const heading = isAutomation
+    ? `neo 请求运行${langLabel ? ` ${langLabel}` : ""}脚本来修改系统/软件设置`
+    : "neo 请求运行本地命令";
+  const purposeLine = isAutomation && meta.purpose
+    ? `<span class="command-confirm-purpose">目的：${escapeHtml(meta.purpose)}</span>`
+    : "";
+  bar.innerHTML = `
+    <div class="command-confirm-text">
+      <strong>${escapeHtml(heading)}</strong>
+      ${purposeLine}
+      <code>${escapeHtml(command)}</code>
+      <small>60 秒未操作将自动拒绝</small>
+    </div>
+    <div class="command-confirm-actions">
+      <button type="button" data-confirm-action="allow">允许一次</button>
+      <button type="button" data-confirm-action="allow-all">本次对话全部允许</button>
+      <button type="button" data-confirm-action="deny">拒绝</button>
+    </div>
+  `;
+  bar.addEventListener("click", (event) => {
+    const action = event.target?.dataset?.confirmAction;
+    if (!action) return;
+    if (action === "allow-all" && conversationId) commandAllowAllConversations.add(conversationId);
+    const approved = action === "allow" || action === "allow-all";
+    postCommandConfirm(id, approved);
+    addTaskEvent(approved ? "已允许命令执行" : "已拒绝命令执行", command.slice(0, 120), approved ? "running" : "error", { persist: false });
+    hideCommandConfirmBar();
+  });
+  document.body.append(bar);
+  activeCommandConfirmBar = bar;
+}
+
+async function callChatApi(provider, model, messages, { onDelta, onToolStart, onToolEnd, onSkillStart, onSkillStep, onSkillEnd, onPseudoToolBlocked, onUnverifiedCompletionBlocked, onToolArgFuse, onPlanUpdate } = {}) {
   const controller = new AbortController();
   activeChatController = controller;
 
@@ -3888,6 +4344,12 @@ async function callChatApi(provider, model, messages, { onDelta, onToolStart, on
           onPseudoToolBlocked?.(event.names || []);
         } else if (event.type === "unverified_completion_blocked") {
           onUnverifiedCompletionBlocked?.(event.claim || {});
+        } else if (event.type === "plan_update") {
+          onPlanUpdate?.(event.steps || []);
+        } else if (event.type === "command_confirm") {
+          showCommandConfirmBar(event.id, String(event.command || ""), { kind: event.kind, language: event.language, purpose: event.purpose });
+        } else if (event.type === "command_confirm_resolved") {
+          hideCommandConfirmBar(event.id);
         } else if (event.type === "tool_arg_fuse") {
           onToolArgFuse?.(event);
         } else if (event.type === "done") {
@@ -3900,14 +4362,15 @@ async function callChatApi(provider, model, messages, { onDelta, onToolStart, on
     }
   } finally {
     reader.releaseLock();
+    hideCommandConfirmBar();
   }
 
   if (!finalData) throw new Error("流式响应未返回完成事件");
   return finalData;
 }
 
-const criticalToolNames = new Set(["write_file", "export_image", "create_excel_file", "create_word_file", "create_ppt_file", "clean_table_file", "clean_table_files", "download_url", "read_web_page", "run_command"]);
-const fileOutputToolNames = new Set(["write_file", "export_image", "create_excel_file", "create_word_file", "create_ppt_file", "clean_table_file", "clean_table_files", "download_url"]);
+const criticalToolNames = new Set(["write_file", "edit_file", "export_image", "chart_from_table", "pivot_table", "create_excel_file", "create_word_file", "create_ppt_file", "create_pdf_file", "clean_table_file", "clean_table_files", "save_research_report", "download_url", "read_web_page", "read_web_pages", "run_command", "run_automation_script"]);
+const fileOutputToolNames = new Set(["write_file", "edit_file", "export_image", "chart_from_table", "pivot_table", "create_excel_file", "create_word_file", "create_ppt_file", "create_pdf_file", "clean_table_file", "clean_table_files", "save_research_report", "download_url"]);
 
 function hasVerifiedOutputArtifact(steps = []) {
   return (steps || []).some((step) => {
@@ -4012,6 +4475,15 @@ async function sendPrompt(event) {
   if (!prompt && !attachmentsToSend.length && !referencesToSend.length) return;
 
   syncStateFromUI();
+  // 发送前检查目标供应商的 API Key，缺失时直接带用户去设置页，省一次失败请求
+  const plannedProvider = resolveModelRoute(attachmentsToSend).provider;
+  if (plannedProvider && plannedProvider.protocol !== "mock" && !String(plannedProvider.apiKey || "").trim()) {
+    const name = plannedProvider.name || "当前供应商";
+    setStatus("缺少 API Key", `${name} 还没填 API Key，已带你到设置页`, "error");
+    addTaskEvent("已取消发送", `${name} 缺少 API Key，填好后回来重新发送即可`, "error", { persist: false });
+    openSettingsTab("model");
+    return;
+  }
   if (!(await ensureLocalToolsBeforeSend(prompt))) {
     setStatus("需要本地工具", "这个任务要开启本地工具后才能真实执行", "error");
     addTaskEvent("已取消发送", "未开启本地工具，无法真实操作本地文件或命令", "error", { persist: false });
@@ -4027,6 +4499,8 @@ async function sendPrompt(event) {
   const waitTimer = setTimeout(() => {
     if (busy) setStatus("模型思考中", "仍在等待模型响应", "running");
   }, 10000);
+
+  let streamTyper = null;
 
   try {
     const localAvatarRequest = isAvatarChangeIntent(prompt) && attachmentsToSend.some((attachment) => attachment.kind === "image");
@@ -4070,6 +4544,9 @@ async function sendPrompt(event) {
       return;
     }
 
+    currentPlan = [];
+    await refreshWorkspaceInstructions();
+    await maybeCompressConversation(conversation, provider, model);
     const messages = buildRequestMessages(conversation, prompt, importedAttachments, provider, model);
     setStatus("正在生成回复", `${route.label} · ${provider.name} · ${model}`, "running");
     addTaskEvent("调用模型", `${provider.name || "未命名供应商"} · ${model}`, "running");
@@ -4083,28 +4560,31 @@ async function sendPrompt(event) {
     const streamBubble = bubbles[bubbles.length - 1] || null;
 
     let streamedContent = "";
+    streamTyper = streamBubble ? createStreamTyper(streamBubble) : null;
 
     const data = await callChatApi(provider, model, messages, {
       onDelta(text) {
         streamedContent += text;
-        if (streamBubble) {
-          if (streamedContent.trim()) {
-            streamBubble.innerHTML = renderAssistantMarkdown(streamedContent, { trim: false });
-            streamBubble.classList.add("has-streamed-content");
-          }
-          els.messageList.scrollTop = els.messageList.scrollHeight;
-        }
+        streamTyper?.push(text);
       },
       onToolStart(name, args) {
         notifyPet("working");
+        if (name === "update_plan") return;
         addTaskEvent(`工具调用: ${name}`, JSON.stringify(args || {}).slice(0, 120), "running");
       },
+      onPlanUpdate(steps) {
+        currentPlan = steps;
+        state.workspaceOpen = true;
+        state.workspaceTab = "tasks";
+        renderWorkspacePanel();
+      },
       onToolEnd(name, result) {
+        if (name === "update_plan") return;
         addTaskEvent(`工具完成: ${name}`, result?.ok ? (result.path || "成功") : (result?.error || "失败"), result?.ok ? "complete" : "error");
         recordOfficeTaskEvents(result?.officeTask);
       },
       onSkillStart(skill, task) {
-        const skillNames = { "local-files": "本地文件助手", "spreadsheet-pro": "表格处理", "document-reader": "文档阅读", "finance-tables": "财务表格", "code-review": "代码审查", "web-browser": "网页助手", "desktop-control": "电脑操作", "local-command": "本地命令" };
+        const skillNames = { "local-files": "本地文件助手", "spreadsheet-pro": "表格处理", "document-reader": "文档阅读", "finance-tables": "财务表格", "code-review": "代码审查", "web-browser": "网页助手", "research": "信息搜集", "desktop-control": "电脑操作", "local-command": "本地命令", "system-control": "系统与软件设置", "screen-view": "看屏幕" };
         addTaskEvent(`▶ 技能子智能体: ${skillNames[skill] || skill}`, (task || "").slice(0, 120), "running");
       },
       onSkillStep(skill, phase, name, args, result) {
@@ -4129,6 +4609,8 @@ async function sendPrompt(event) {
       }
     });
 
+    // 让平滑揭示把剩余文字补完（最多等 400ms），收尾更顺，再交给 commit 写入真实消息
+    if (streamTyper) { streamTyper.finish(); await streamTyper.whenSettled(400); }
     // 移除占位消息，交给 commitAssistantResponse 写入真实消息
     conversation.messages.pop();
     await commitAssistantResponse(conversation, data, provider, model);
@@ -4148,6 +4630,7 @@ async function sendPrompt(event) {
     setStatus("请求失败", error.message, "error");
   } finally {
     clearTimeout(waitTimer);
+    if (streamTyper) streamTyper.cancel();
     activeChatController = null;
     setBusy(false);
   }
@@ -4163,15 +4646,19 @@ function setBusy(isBusy) {
 }
 
 function setStatus(title, detail, type = "complete") {
-  els.sendStatus.textContent = title;
-  els.sendStatusDetail.textContent = detail || "";
-  els.inlineSendStatus.textContent = title;
-  els.inlineSendStatus.className = `inline-send-status ${type === "running" ? "running" : type === "error" ? "error" : ""}`;
-  els.sendStatusIcon.textContent = type === "error" ? "!" : type === "running" ? "…" : "✓";
-  els.sendStatusToast.className = `status-toast ${type === "running" ? "running" : type === "error" ? "error" : ""}`;
-  window.clearTimeout(stillWaitingTimer);
-  if (type === "complete") {
-    stillWaitingTimer = window.setTimeout(() => els.sendStatusToast.classList.add("hidden"), 2600);
+  if (els.sendStatus) els.sendStatus.textContent = title;
+  if (els.sendStatusDetail) els.sendStatusDetail.textContent = detail || "";
+  if (els.inlineSendStatus) {
+    els.inlineSendStatus.textContent = title;
+    els.inlineSendStatus.className = `inline-send-status ${type === "running" ? "running" : type === "error" ? "error" : ""}`;
+  }
+  if (els.sendStatusIcon) els.sendStatusIcon.textContent = type === "error" ? "!" : type === "running" ? "…" : "✓";
+  if (els.sendStatusToast) {
+    els.sendStatusToast.className = `status-toast ${type === "running" ? "running" : type === "error" ? "error" : ""}`;
+    window.clearTimeout(stillWaitingTimer);
+    if (type === "complete") {
+      stillWaitingTimer = window.setTimeout(() => els.sendStatusToast.classList.add("hidden"), 2600);
+    }
   }
 }
 
@@ -4203,7 +4690,8 @@ async function testCurrentApi() {
         temperature: 0,
         maxTokens: Math.min(state.maxTokens || 128, 128),
         thinking: state.thinking,
-        enableTools: false
+        enableTools: false,
+        stream: false
       },
       {
         timeoutMs: apiTestTimeoutMs,
@@ -4362,11 +4850,12 @@ function setSidebarOpen(open) {
 }
 
 function selectWorkspaceTab(tab) {
-  if (!["tasks", "artifacts", "files", "terminal"].includes(tab)) return;
+  if (!["tasks", "artifacts", "files", "terminal", "audit"].includes(tab)) return;
   state.workspaceTab = tab;
   saveState();
   renderWorkspacePanel();
   if (tab === "files" && !els.fileTree.children.length) loadWorkspaceTree(state.workspacePath || ".");
+  if (tab === "audit") loadOperationLog();
 }
 
 function addTaskEvent(title, detail = "", type = "complete", options = {}) {
@@ -4387,11 +4876,35 @@ function addTaskEvent(title, detail = "", type = "complete", options = {}) {
   return event;
 }
 
+// 当前任务的执行计划（update_plan 工具维护，运行时状态，不持久化）
+let currentPlan = [];
+
 function clearTaskEvents() {
   state.taskEvents = [];
   state.toolSteps = [];
+  currentPlan = [];
   saveState();
   renderWorkspacePanel();
+}
+
+function renderTaskPlan() {
+  if (!els.taskPlanList) return;
+  if (!currentPlan.length) {
+    els.taskPlanList.hidden = true;
+    els.taskPlanList.innerHTML = "";
+    return;
+  }
+  els.taskPlanList.hidden = false;
+  const done = currentPlan.filter((step) => step.status === "done").length;
+  els.taskPlanList.innerHTML = `
+    <div class="panel-mini-title">执行计划 · ${done}/${currentPlan.length}</div>
+    ${currentPlan.map((step) => `
+      <div class="task-plan-step ${escapeHtml(step.status)}">
+        <span class="task-plan-mark">${step.status === "done" ? "✓" : step.status === "in_progress" ? "●" : "○"}</span>
+        <span class="task-plan-title">${escapeHtml(step.title)}</span>
+      </div>
+    `).join("")}
+  `;
 }
 
 function rerunLastUserTask() {
@@ -4433,9 +4946,12 @@ function renderWorkspacePanel() {
         ? "本地命令"
         : activeTab === "artifacts"
           ? "结果文件"
-          : "任务过程";
+          : activeTab === "audit"
+            ? "操作日志"
+            : "任务过程";
   els.workspacePanelStatus.textContent = rootName ? `${tabLabel} · ${rootName}` : tabLabel;
   els.workspacePanelStatus.title = state.workspaceRoot || "";
+  renderTaskPlan();
   renderTaskEvents();
   renderTaskMetrics();
   renderToolSteps();
@@ -4541,7 +5057,7 @@ function renderToolSteps() {
     return;
   }
 
-  const skillNames = { "local-files": "本地文件助手", "spreadsheet-pro": "表格处理", "document-reader": "文档阅读", "finance-tables": "财务表格", "code-review": "代码审查", "web-browser": "网页助手", "desktop-control": "电脑操作", "local-command": "本地命令" };
+  const skillNames = { "local-files": "本地文件助手", "spreadsheet-pro": "表格处理", "document-reader": "文档阅读", "finance-tables": "财务表格", "code-review": "代码审查", "web-browser": "网页助手", "research": "信息搜集", "desktop-control": "电脑操作", "local-command": "本地命令", "system-control": "系统与软件设置", "screen-view": "看屏幕" };
 
   for (const [index, step] of steps.entries()) {
     const item = document.createElement("article");
@@ -4720,12 +5236,12 @@ function artifactsFromToolSteps(steps = []) {
       });
       continue;
     }
-    if (!["write_file", "export_image", "create_excel_file", "create_word_file", "create_ppt_file", "clean_table_file"].includes(step.name) || !step.result.path) continue;
+    if (!["write_file", "edit_file", "export_image", "chart_from_table", "pivot_table", "create_excel_file", "create_word_file", "create_ppt_file", "clean_table_file"].includes(step.name) || !step.result.path) continue;
     artifacts.push({
       path: step.result.path,
-      kind: ["create_excel_file", "clean_table_file"].includes(step.name) ? "sheet" : artifactKindFromPath(step.result.path),
+      kind: ["create_excel_file", "clean_table_file", "pivot_table"].includes(step.name) ? "sheet" : artifactKindFromPath(step.result.path),
       size: step.result.size || 0,
-      source: step.name === "create_excel_file" ? "Excel" : step.name === "create_word_file" ? "Word" : step.name === "create_ppt_file" ? "PPT" : step.name === "clean_table_file" ? "清洗" : step.name === "export_image" ? "图片" : "写入",
+      source: step.name === "create_excel_file" ? "Excel" : step.name === "create_word_file" ? "Word" : step.name === "create_ppt_file" ? "PPT" : step.name === "clean_table_file" ? "清洗" : step.name === "pivot_table" ? "透视" : step.name === "chart_from_table" ? "图表" : step.name === "export_image" ? "图片" : "写入",
       summary: step.name === "create_excel_file"
         ? `生成 ${step.result.sheets?.length || 1} 个工作表`
         : step.name === "create_word_file"
@@ -4734,9 +5250,13 @@ function artifactsFromToolSteps(steps = []) {
             ? `生成 ${step.result.slideCount || step.result.verification?.details?.slideCount || 0} 页 PPT 并通过回读校验`
         : step.name === "clean_table_file"
           ? cleanTableSummary(step.result)
-          : step.name === "export_image"
-            ? `导出 ${step.result.width || ""}x${step.result.height || ""} ${String(step.result.format || "").toUpperCase()} 图片`.trim()
-            : "模型通过本地工具写入"
+        : step.name === "pivot_table"
+          ? `透视汇总 ${step.result.rows || 0} 行 × ${step.result.columns || 0} 列`
+        : step.name === "chart_from_table"
+          ? `从表格生成${({ line: "折线", bar: "柱状", pie: "饼" })[step.result.type] || ""}图`
+            : step.name === "export_image"
+              ? `导出 ${step.result.width || ""}x${step.result.height || ""} ${String(step.result.format || "").toUpperCase()} 图片`.trim()
+              : "模型通过本地工具写入"
     });
   }
   return artifacts;
@@ -4789,6 +5309,97 @@ function renderArtifacts() {
   }
 }
 
+// 操作审计日志（1.8 护栏）：展示后端 /api/operation-log 记录的每次工具调用元数据
+function formatAuditTime(ts) {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function formatAuditDuration(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) return "";
+  if (value < 1000) return `${Math.round(value)}ms`;
+  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}s`;
+}
+
+function auditArgsSummaryText(args) {
+  if (!args || typeof args !== "object") return "";
+  const parts = [];
+  for (const [key, value] of Object.entries(args)) {
+    if (value === "" || value === null || value === undefined) continue;
+    parts.push(`${key}=${value}`);
+  }
+  return parts.join(" · ");
+}
+
+function renderOperationLog(entries) {
+  if (!els.auditLogList) return;
+  els.auditLogList.innerHTML = "";
+  const list = Array.isArray(entries) ? entries : [];
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-panel";
+    empty.innerHTML = `
+      <strong>暂无操作记录</strong>
+      <small>neo 执行工具（读写文件、运行命令、联网等）后会在这里留下可审计的痕迹。</small>
+    `;
+    els.auditLogList.append(empty);
+    return;
+  }
+  for (const entry of list) {
+    const item = document.createElement("article");
+    const ok = entry.ok !== false && entry.status !== "failed";
+    item.className = `audit-log-item ${ok ? "audit-ok" : "audit-fail"}`;
+    const argsText = auditArgsSummaryText(entry.args);
+    const paths = Array.isArray(entry.paths) ? entry.paths.filter(Boolean) : [];
+    const duration = formatAuditDuration(entry.durationMs);
+    item.innerHTML = `
+      <span class="audit-status" title="${ok ? "成功" : "失败"}">${ok ? "✓" : "✕"}</span>
+      <div class="audit-main">
+        <div class="audit-head">
+          <strong>${escapeHtml(formatToolName(entry.tool) || entry.tool || "未知工具")}</strong>
+          <small class="audit-time">${escapeHtml(formatAuditTime(entry.ts))}</small>
+          ${duration ? `<small class="audit-duration">${escapeHtml(duration)}</small>` : ""}
+        </div>
+        ${argsText ? `<small class="audit-args" title="${escapeAttr(argsText)}">${escapeHtml(argsText)}</small>` : ""}
+        ${paths.length ? `<small class="audit-paths" title="${escapeAttr(paths.join("，"))}">产出：${escapeHtml(paths.join("，"))}</small>` : ""}
+        ${!ok && entry.error ? `<small class="audit-error" title="${escapeAttr(entry.error)}">${escapeHtml(entry.error)}</small>` : ""}
+      </div>
+    `;
+    els.auditLogList.append(item);
+  }
+}
+
+async function loadOperationLog() {
+  if (!els.auditLogList) return;
+  try {
+    const response = await fetch("/api/operation-log?limit=200");
+    const data = await response.json();
+    if (!response.ok || data?.ok === false) throw new Error(data?.error || "读取失败");
+    renderOperationLog(data.entries || []);
+  } catch (error) {
+    els.auditLogList.innerHTML = "";
+    const fail = document.createElement("div");
+    fail.className = "empty-panel";
+    fail.innerHTML = `<strong>读取操作日志失败</strong><small>${escapeHtml(error.message || "请稍后重试")}</small>`;
+    els.auditLogList.append(fail);
+  }
+}
+
+async function clearOperationLog() {
+  if (!window.confirm("确定清空本地操作日志？此操作不可恢复。")) return;
+  try {
+    const response = await fetch("/api/operation-log", { method: "DELETE" });
+    const data = await response.json();
+    if (!response.ok || data?.ok === false) throw new Error(data?.error || "清空失败");
+  } catch (error) {
+    /* 清空失败也刷新一次，至少展示当前状态 */
+  }
+  loadOperationLog();
+}
+
 async function openArtifact(filePath) {
   await postWorkspacePathAction("/api/workspace/open", filePath, "正在打开文件", "打开失败");
 }
@@ -4818,16 +5429,24 @@ function formatToolName(name) {
     {
       list_files: "列出文件",
       read_file: "读取文件",
+      edit_file: "编辑文件",
       inspect_office_file: "检查 Office",
       read_excel_file: "读取表格",
+      check_table: "数据体检",
+      chart_from_table: "表格出图",
+      pivot_table: "透视汇总",
       write_file: "写入文件",
       export_image: "导出图片",
       create_excel_file: "生成 Excel",
       create_word_file: "生成 Word",
       create_ppt_file: "生成 PPT",
+      create_pdf_file: "生成 PDF",
       clean_table_file: "清洗表格",
       clean_table_files: "批量清洗表格",
       verify_office_file: "校验 Office",
+      get_template: "取模板",
+      read_image_file: "读图片",
+      search_workspace: "问我的文件",
       search_files: "搜索文件",
       search_web: "搜索网页",
       read_web_page: "读取网页",
@@ -4836,7 +5455,11 @@ function formatToolName(name) {
       open_workspace_item: "打开本地文件",
       open_desktop_app: "打开应用",
       show_desktop_notification: "系统通知",
-      run_command: "运行命令"
+      read_web_pages: "批量读网页",
+      save_research_report: "保存简报",
+      run_command: "运行命令",
+      run_automation_script: "设置脚本",
+      screen_capture: "看屏幕"
     }[name] || name || "工具"
   );
 }
@@ -5032,6 +5655,11 @@ async function runTerminalCommand(event) {
 }
 
 function openSettings() {
+  closeModelPopover();
+  if (document.body.classList.contains("neo-lens-mode")) {
+    if (state.sidebarOpen !== false) setSidebarOpen(false);
+    if (state.workspaceOpen) setWorkspaceOpen(false);
+  }
   els.settingsSheet.classList.add("open");
   els.settingsBackdrop.classList.remove("hidden");
 }
@@ -5039,6 +5667,56 @@ function openSettings() {
 function closeSettings() {
   els.settingsSheet.classList.remove("open");
   els.settingsBackdrop.classList.add("hidden");
+}
+
+/** 打开设置并切换到指定标签页（如 "model"） */
+function openSettingsTab(tabId) {
+  openSettings();
+  document.querySelector(`[data-settings-tab="${tabId}"]`)?.click();
+}
+
+function closeFloatingSurfacesFromBlankClick(event) {
+  const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+  if (!target) return;
+
+  if (target.closest([
+    ".neo-capability-rail",
+    ".settings-sheet",
+    ".environment-modal",
+    ".model-popover",
+    ".sidebar",
+    ".workspace-panel",
+    ".composer",
+    ".message",
+    ".status-toast",
+    "button",
+    "input",
+    "textarea",
+    "select",
+    "a",
+    "label",
+    "[role='button']"
+  ].join(","))) {
+    return;
+  }
+
+  const clickedBlankPlane =
+    target === els.settingsBackdrop ||
+    target === els.environmentModal ||
+    target === els.workspaceCard ||
+    target === els.appShell ||
+    target === document.body ||
+    Boolean(target.closest(".main, .workspace-card, .sheet-backdrop, .modal-backdrop"));
+
+  if (!clickedBlankPlane) return;
+
+  if (els.settingsSheet?.classList.contains("open")) closeSettings();
+  if (els.environmentModal && !els.environmentModal.classList.contains("hidden")) hideEnvironmentModal();
+  if (els.modelPopover && !els.modelPopover.classList.contains("hidden")) closeModelPopover();
+  if (document.body.classList.contains("neo-lens-mode")) {
+    if (state.sidebarOpen !== false) setSidebarOpen(false);
+    if (state.workspaceOpen) setWorkspaceOpen(false);
+  }
 }
 
 function toggleSettings() {
@@ -5150,10 +5828,10 @@ async function checkHealth() {
     if (data.platform) {
       document.documentElement.classList.toggle("platform-win", data.platform === "win32");
     }
+    document.documentElement.classList.toggle("desktop-mode", Boolean(data.desktopMode));
     els.healthText && (els.healthText.textContent = data.ok ? "已连接" : "离线");
     if (els.appVersionBadge && data.version) els.appVersionBadge.textContent = `v${data.version}`;
     if (els.aboutVersionLabel && data.version) els.aboutVersionLabel.textContent = `v${data.version}`;
-    if (els.workspaceStatusVersion && data.version) els.workspaceStatusVersion.textContent = `neo-core v${data.version}`;
     if (data.workspace) {
       state.workspaceRoot = data.workspace;
       saveState();
@@ -5163,6 +5841,54 @@ async function checkHealth() {
     els.healthText && (els.healthText.textContent = "离线");
   }
 }
+
+// ── 全局动画闸门：窗口失焦或隐藏时暂停所有装饰动画（粒子、电光边框、CSS 呼吸光晕），
+//    省 CPU/GPU 和电量；恢复焦点时各循环通过 resume 钩子重新启动 ──────────────────
+let decorAnimationsPaused = false;
+const decorAnimationResumeHooks = [];
+
+function updateDecorAnimationGate() {
+  const shouldPause = document.hidden || !document.hasFocus() || Boolean(state.performanceMode);
+  if (shouldPause === decorAnimationsPaused) return;
+  decorAnimationsPaused = shouldPause;
+  document.body.classList.toggle("neo-anim-paused", shouldPause);
+  if (!shouldPause) for (const resume of decorAnimationResumeHooks) resume();
+}
+
+/** 流畅优先模式：去玻璃模糊、隐藏装饰画布、停所有装饰动画 */
+function applyPerformanceMode() {
+  document.body.classList.toggle("neo-performance-mode", Boolean(state.performanceMode));
+  if (els.performanceModeToggle) els.performanceModeToggle.checked = Boolean(state.performanceMode);
+  updateDecorAnimationGate();
+}
+
+// ── Lens 主题（深/浅）────────────────────────────────────────────
+// canvas 特效不认 CSS 变量，统一经 lensColorTriplet 从 body 上读
+// styles.css 里的 --lens-*-rgb 三元组，主题切换时清缓存即可整体换色。
+let lensColorCache = null;
+
+function lensColorTriplet(name, fallback) {
+  if (!lensColorCache) lensColorCache = {};
+  if (!(name in lensColorCache)) {
+    const value = getComputedStyle(document.body).getPropertyValue(name).trim();
+    lensColorCache[name] = value || fallback;
+  }
+  return lensColorCache[name];
+}
+
+function isLensThemeLight() {
+  return state.lensTheme === "light";
+}
+
+function applyLensTheme() {
+  document.body.classList.toggle("lens-theme-light", isLensThemeLight());
+  lensColorCache = null;
+  if (els.lensThemeToggle) els.lensThemeToggle.checked = isLensThemeLight();
+}
+
+window.addEventListener("focus", updateDecorAnimationGate);
+window.addEventListener("blur", updateDecorAnimationGate);
+document.addEventListener("visibilitychange", updateDecorAnimationGate);
 
 function initAmbientMotion() {
   const canvas = els.ambientMotionCanvas;
@@ -5197,6 +5923,7 @@ function initAmbientMotion() {
   }
 
   function frame() {
+    if (decorAnimationsPaused) { rafId = 0; return; }
     ctx.clearRect(0, 0, width, height);
     for (const dot of particles) {
       dot.x += dot.vx;
@@ -5236,6 +5963,534 @@ function initAmbientMotion() {
   resize();
   cancelAnimationFrame(rafId);
   rafId = requestAnimationFrame(frame);
+  decorAnimationResumeHooks.push(() => { if (!rafId) rafId = requestAnimationFrame(frame); });
+}
+
+function initBorderGlow() {
+  const glowTargets = [
+    [els.sidebar, "sidebar"],
+    [els.chatForm, "composer"],
+    [els.workspacePanel, "workspace"],
+    [els.settingsSheet, "settings"]
+  ];
+
+  for (const [target, variant] of glowTargets) {
+    if (!target || target.dataset.borderGlowReady === "true") continue;
+    target.dataset.borderGlowReady = "true";
+    target.classList.add("neo-border-glow", `neo-border-glow-${variant}`);
+    if (!Array.from(target.children).some((child) => child.classList.contains("edge-light"))) {
+      const edgeLight = document.createElement("span");
+      edgeLight.className = "edge-light";
+      edgeLight.setAttribute("aria-hidden", "true");
+      target.appendChild(edgeLight);
+    }
+
+    // 缓动插值：目标值由鼠标事件更新，实际写入的值在 rAF 中逐帧逼近，
+    // 避免渐变角度和亮度随鼠标瞬时跳变造成的生硬感。
+    const desired = { edge: 0, angle: 45 };
+    const current = { edge: 0, angle: 45 };
+    let glowRafId = 0;
+    let glowAnimating = false;
+
+    const applyGlow = () => {
+      target.style.setProperty("--edge-proximity", current.edge.toFixed(3));
+      target.style.setProperty("--cursor-angle", `${current.angle.toFixed(3)}deg`);
+    };
+
+    const glowTick = () => {
+      if (decorAnimationsPaused) { glowAnimating = false; return; }
+      const ease = 0.14;
+      // 角度走最短路径，跨 0°/360° 不倒转
+      const angleDelta = ((desired.angle - current.angle + 540) % 360) - 180;
+      current.angle = (current.angle + angleDelta * ease + 360) % 360;
+      current.edge += (desired.edge - current.edge) * ease;
+      applyGlow();
+      if (Math.abs(angleDelta) > 0.08 || Math.abs(desired.edge - current.edge) > 0.08) {
+        glowRafId = requestAnimationFrame(glowTick);
+      } else {
+        current.angle = desired.angle;
+        current.edge = desired.edge;
+        applyGlow();
+        glowAnimating = false;
+      }
+    };
+
+    const ensureGlowAnimating = () => {
+      if (glowAnimating) return;
+      glowAnimating = true;
+      cancelAnimationFrame(glowRafId);
+      glowRafId = requestAnimationFrame(glowTick);
+    };
+
+    target.addEventListener("pointermove", (event) => {
+      const rect = target.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const dx = x - cx;
+      const dy = y - cy;
+      const kx = dx === 0 ? Infinity : cx / Math.abs(dx);
+      const ky = dy === 0 ? Infinity : cy / Math.abs(dy);
+      const edge = Math.min(Math.max(1 / Math.min(kx, ky), 0), 1);
+      let angle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+      if (angle < 0) angle += 360;
+      desired.edge = edge * 100;
+      desired.angle = angle;
+      ensureGlowAnimating();
+    }, { passive: true });
+
+    target.addEventListener("pointerleave", () => {
+      desired.edge = 0;
+      ensureGlowAnimating();
+    }, { passive: true });
+  }
+}
+
+function initLivingAssistantMode() {
+  document.body.classList.add("neo-lens-mode");
+  document.documentElement.classList.toggle("desktop-mode", Boolean(window.neoDesktop));
+  if (state.uiMode !== livingAssistantModeId) {
+    state.uiMode = livingAssistantModeId;
+    state.sidebarOpen = false;
+    state.workspaceOpen = false;
+    saveState();
+  }
+}
+
+function initLensStageInteraction() {
+  const target = els.workspaceCard || document.querySelector(".workspace-card");
+  if (!target || target.dataset.lensStageReady === "true") return;
+  target.dataset.lensStageReady = "true";
+
+  const clampMotion = (value, min, max) => Math.max(min, Math.min(max, value));
+  const desired = { px: 50, py: 50, dx: 0, dy: 0, alpha: 0.055 };
+  const current = { ...desired };
+  let hasDesktopCursor = false;
+
+  const setDesiredIdle = () => {
+    desired.px = 50;
+    desired.py = 50;
+    desired.dx = 0;
+    desired.dy = 0;
+    desired.alpha = 0.055;
+  };
+
+  const setDesiredFromClientPoint = (clientX, clientY, { outside = false } = {}) => {
+    const rect = target.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const px = rect.width ? (x / rect.width) * 100 : 50;
+    const py = rect.height ? (y / rect.height) * 100 : 50;
+    desired.px = clampMotion(px, -24, 124);
+    desired.py = clampMotion(py, -24, 124);
+    desired.dx = clampMotion((px - 50) / 50, -1.35, 1.35);
+    desired.dy = clampMotion((py - 50) / 50, -1.35, 1.35);
+    desired.alpha = outside ? 0.12 : 0.17;
+  };
+
+  const render = () => {
+    const ease = 0.18;
+    current.px += (desired.px - current.px) * ease;
+    current.py += (desired.py - current.py) * ease;
+    current.dx += (desired.dx - current.dx) * ease;
+    current.dy += (desired.dy - current.dy) * ease;
+    current.alpha += (desired.alpha - current.alpha) * ease;
+
+    target.style.setProperty("--stage-pointer-x", `${current.px.toFixed(2)}%`);
+    target.style.setProperty("--stage-pointer-y", `${current.py.toFixed(2)}%`);
+    target.style.setProperty("--stage-pointer-alpha", current.alpha.toFixed(3));
+    target.style.setProperty("--stage-parallax-x", `${(current.dx * 18).toFixed(2)}px`);
+    target.style.setProperty("--stage-parallax-y", `${(current.dy * 14).toFixed(2)}px`);
+    target.style.setProperty("--stage-parallax-inverse-x", `${(current.dx * -8).toFixed(2)}px`);
+    target.style.setProperty("--stage-parallax-inverse-y", `${(current.dy * -6).toFixed(2)}px`);
+    target.style.setProperty("--stage-orbit-x", `${(current.dx * 24).toFixed(2)}px`);
+    target.style.setProperty("--stage-orbit-y", `${(current.dy * 18).toFixed(2)}px`);
+    target.style.setProperty("--stage-shift-x", `${(current.dx * 11).toFixed(2)}px`);
+    target.style.setProperty("--stage-shift-y", `${(current.dy * 9).toFixed(2)}px`);
+    target.style.setProperty("--stage-tilt-x", `${(current.dx * 3.6).toFixed(3)}deg`);
+    target.style.setProperty("--stage-tilt-y", `${(current.dy * -2.8).toFixed(3)}deg`);
+    requestAnimationFrame(render);
+  };
+
+  target.addEventListener("pointermove", (event) => {
+    if (hasDesktopCursor) return;
+    setDesiredFromClientPoint(event.clientX, event.clientY);
+  }, { passive: true });
+
+  target.addEventListener("pointerleave", () => {
+    if (!hasDesktopCursor) setDesiredIdle();
+  }, { passive: true });
+
+  window.neoDesktop?.onGlobalCursor?.((payload = {}) => {
+    if (!Number.isFinite(payload.clientX) || !Number.isFinite(payload.clientY)) return;
+    hasDesktopCursor = true;
+    setDesiredFromClientPoint(payload.clientX, payload.clientY, { outside: true });
+  });
+
+  setDesiredIdle();
+  requestAnimationFrame(render);
+}
+
+// 鼠标星尘尾迹：光标在舱体内移动时洒出青绿色微粒，缓慢漂散渐隐；点击时轻微绽放。
+// 与现有跟随高光叠加，颜色经 lensColorTriplet 取自 --lens-*-rgb 主题变量。
+function initLensCursorParticles() {
+  const target = els.workspaceCard || document.querySelector(".workspace-card");
+  if (!target || target.dataset.lensParticlesReady === "true") return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  target.dataset.lensParticlesReady = "true";
+
+  const canvas = document.createElement("canvas");
+  canvas.className = "lens-cursor-particles";
+  canvas.setAttribute("aria-hidden", "true");
+  target.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const maxParticles = 140;
+  const particles = [];
+  let width = 0;
+  let height = 0;
+  let rafId = 0;
+  let running = false;
+  let lastSpawn = { x: 0, y: 0, has: false };
+  let lastFrameAt = 0;
+
+  function resize() {
+    const rect = target.getBoundingClientRect();
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    width = Math.max(1, rect.width);
+    height = Math.max(1, rect.height);
+    canvas.width = Math.floor(width * ratio);
+    canvas.height = Math.floor(height * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
+
+  function spawn(x, y, { vx = 0, vy = 0, burst = false } = {}) {
+    if (particles.length >= maxParticles) particles.splice(0, particles.length - maxParticles + 1);
+    const mint = Math.random() < 0.35;
+    particles.push({
+      x: x + (Math.random() - 0.5) * 6,
+      y: y + (Math.random() - 0.5) * 6,
+      vx: vx * 0.05 + (Math.random() - 0.5) * (burst ? 1.4 : 0.34),
+      vy: vy * 0.05 + (Math.random() - 0.5) * (burst ? 1.4 : 0.34) - (burst ? 0.1 : 0.16),
+      size: burst ? 0.8 + Math.random() * 1.6 : 0.5 + Math.random() * 1.3,
+      life: 0,
+      maxLife: burst ? 620 + Math.random() * 520 : 780 + Math.random() * 720,
+      color: mint
+        ? lensColorTriplet("--lens-jade-bright-rgb", "159, 255, 237")
+        : lensColorTriplet("--lens-jade-rgb", "89, 240, 202"),
+      twinkle: 2.4 + Math.random() * 4.2
+    });
+  }
+
+  function frame(now) {
+    const dt = lastFrameAt ? Math.min(now - lastFrameAt, 48) : 16;
+    lastFrameAt = now;
+    ctx.clearRect(0, 0, width, height);
+    // 加色混合只适合深色底，浅色主题下粒子改普通叠加
+    ctx.globalCompositeOperation = isLensThemeLight() ? "source-over" : "lighter";
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) { particles.splice(i, 1); continue; }
+      const t = p.life / p.maxLife;
+      p.vx *= 0.985;
+      p.vy = p.vy * 0.985 - 0.0016 * dt * 0.06;
+      p.x += p.vx * dt * 0.06;
+      p.y += p.vy * dt * 0.06;
+      // 渐隐 + 轻微闪烁
+      const fade = t < 0.18 ? t / 0.18 : 1 - (t - 0.18) / 0.82;
+      const alpha = Math.max(0, fade * (0.5 + 0.22 * Math.sin(p.life / 1000 * p.twinkle * Math.PI)));
+      ctx.fillStyle = `rgba(${p.color}, ${(alpha * 0.55).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(${p.color}, ${(alpha * 0.14).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = "source-over";
+    if (particles.length) {
+      rafId = requestAnimationFrame(frame);
+    } else {
+      running = false;
+      lastFrameAt = 0;
+      ctx.clearRect(0, 0, width, height);
+    }
+  }
+
+  function ensureRunning() {
+    if (running) return;
+    running = true;
+    resize();
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(frame);
+  }
+
+  target.addEventListener("pointermove", (event) => {
+    const rect = target.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    if (lastSpawn.has) {
+      const dist = Math.hypot(x - lastSpawn.x, y - lastSpawn.y);
+      if (dist < 9) return;
+      const vx = x - lastSpawn.x;
+      const vy = y - lastSpawn.y;
+      const count = Math.min(3, Math.max(1, Math.round(dist / 16)));
+      for (let i = 0; i < count; i++) {
+        const k = (i + 1) / count;
+        spawn(lastSpawn.x + vx * k, lastSpawn.y + vy * k, { vx, vy });
+      }
+    } else {
+      spawn(x, y);
+    }
+    lastSpawn = { x, y, has: true };
+    ensureRunning();
+  }, { passive: true });
+
+  target.addEventListener("pointerleave", () => { lastSpawn.has = false; }, { passive: true });
+
+  target.addEventListener("pointerdown", (event) => {
+    const rect = target.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    for (let i = 0; i < 10; i++) spawn(x, y, { burst: true });
+    ensureRunning();
+  }, { passive: true });
+
+  window.addEventListener("resize", () => { if (running) resize(); }, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      cancelAnimationFrame(rafId);
+      running = false;
+      lastFrameAt = 0;
+      particles.length = 0;
+    }
+  });
+}
+
+function initNeoElectricBorders() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const targets = [
+    [els.workspaceCard || document.querySelector(".workspace-card"), "stage"],
+    [els.chatForm, "composer"]
+  ];
+  for (const [target, variant] of targets) attachNeoElectricBorder(target, variant);
+
+  function attachNeoElectricBorder(target, variant = "composer") {
+  if (!target || target.dataset.neoElectricReady === "true") return;
+
+  target.dataset.neoElectricReady = "true";
+  target.classList.add("neo-electric-border", "neo-electric-border-idle", `neo-electric-border-${variant}`);
+
+  const canvas = document.createElement("canvas");
+  canvas.className = `neo-electric-canvas neo-electric-canvas-${variant}`;
+  canvas.setAttribute("aria-hidden", "true");
+  target.prepend(canvas);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  let rect = { width: 0, height: 0 };
+  let ratio = 1;
+  let borderRadius = 52;
+  let rafId = 0;
+  let focused = false;
+  let lastDrawTime = 0;
+  const desktopMode = document.documentElement.classList.contains("desktop-mode");
+  // 慢速脉冲光效 30fps 肉眼无差，所有模式统一限帧（120Hz 屏上省 3/4 的绘制）
+  const frameInterval = 1000 / 30;
+  const baseSamples = desktopMode ? (variant === "stage" ? 118 : 104) : 220;
+  const arcSamples = desktopMode ? 24 : 24;
+
+  const random = (x) => {
+    const value = Math.sin(x * 12.9898) * 43758.5453;
+    return value - Math.floor(value);
+  };
+
+  const noise = (x, y) => {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    const fx = x - ix;
+    const fy = y - iy;
+    const a = random(ix + iy * 57);
+    const b = random(ix + 1 + iy * 57);
+    const c = random(ix + (iy + 1) * 57);
+    const d = random(ix + 1 + (iy + 1) * 57);
+    const ux = fx * fx * (3 - 2 * fx);
+    const uy = fy * fy * (3 - 2 * fy);
+    return a * (1 - ux) * (1 - uy) + b * ux * (1 - uy) + c * (1 - ux) * uy + d * ux * uy;
+  };
+
+  function resize() {
+    const bounds = target.getBoundingClientRect();
+    rect = {
+      width: Math.max(1, bounds.width + 52),
+      height: Math.max(1, bounds.height + 52)
+    };
+    ratio = desktopMode ? Math.min(window.devicePixelRatio || 1, 1.35) : Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(rect.width * ratio);
+    canvas.height = Math.round(rect.height * ratio);
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    borderRadius = Number.parseFloat(getComputedStyle(target).borderTopLeftRadius) || 52;
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
+
+  function roundedRectPoint(progress, left, top, width, height, radius) {
+    const straightWidth = width - 2 * radius;
+    const straightHeight = height - 2 * radius;
+    const corner = Math.PI * radius / 2;
+    const perimeter = 2 * straightWidth + 2 * straightHeight + 4 * corner;
+    let distance = ((progress % 1) + 1) % 1 * perimeter;
+
+    if (distance < straightWidth) {
+      return { x: left + radius + distance, y: top, nx: 0, ny: -1 };
+    }
+    distance -= straightWidth;
+    if (distance < corner) {
+      const angle = -Math.PI / 2 + distance / radius;
+      return {
+        x: left + width - radius + Math.cos(angle) * radius,
+        y: top + radius + Math.sin(angle) * radius,
+        nx: Math.cos(angle),
+        ny: Math.sin(angle)
+      };
+    }
+    distance -= corner;
+    if (distance < straightHeight) {
+      return { x: left + width, y: top + radius + distance, nx: 1, ny: 0 };
+    }
+    distance -= straightHeight;
+    if (distance < corner) {
+      const angle = distance / radius;
+      return {
+        x: left + width - radius + Math.cos(angle) * radius,
+        y: top + height - radius + Math.sin(angle) * radius,
+        nx: Math.cos(angle),
+        ny: Math.sin(angle)
+      };
+    }
+    distance -= corner;
+    if (distance < straightWidth) {
+      return { x: left + width - radius - distance, y: top + height, nx: 0, ny: 1 };
+    }
+    distance -= straightWidth;
+    if (distance < corner) {
+      const angle = Math.PI / 2 + distance / radius;
+      return {
+        x: left + radius + Math.cos(angle) * radius,
+        y: top + height - radius + Math.sin(angle) * radius,
+        nx: Math.cos(angle),
+        ny: Math.sin(angle)
+      };
+    }
+    distance -= corner;
+    if (distance < straightHeight) {
+      return { x: left, y: top + height - radius - distance, nx: -1, ny: 0 };
+    }
+    distance -= straightHeight;
+    const angle = Math.PI + distance / radius;
+    return {
+      x: left + radius + Math.cos(angle) * radius,
+      y: top + radius + Math.sin(angle) * radius,
+      nx: Math.cos(angle),
+      ny: Math.sin(angle)
+    };
+  }
+
+  function drawPath(time, color, lineWidth, alpha, offset, chaos, sampleCount, segmentStart = 0, segmentLength = 1) {
+    const left = 26;
+    const top = 26;
+    const width = Math.max(1, rect.width - 52);
+    const height = Math.max(1, rect.height - 52);
+    const radius = Math.min(borderRadius, width / 2, height / 2);
+
+    ctx.beginPath();
+    for (let i = 0; i <= sampleCount; i += 1) {
+      const local = i / sampleCount;
+      const progress = segmentStart + local * segmentLength + offset;
+      const point = roundedRectPoint(progress, left, top, width, height, radius);
+      const n = noise(progress * 24 + offset * 31, time * 0.0012);
+      const jitter = (n - 0.5) * chaos;
+      const x = point.x + point.nx * jitter;
+      const y = point.y + point.ny * jitter;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  }
+
+  function frame(time) {
+    if (decorAnimationsPaused) { rafId = 0; return; }
+    if (frameInterval && time - lastDrawTime < frameInterval) {
+      rafId = requestAnimationFrame(frame);
+      return;
+    }
+    lastDrawTime = time;
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    const activeBoost = focused || target.matches(":focus-within") || target.matches(":hover") ? 1 : 0;
+    const pulse = 0.52 + Math.sin(time * 0.003) * 0.18 + activeBoost * 0.26;
+
+    const jadeRGB = lensColorTriplet("--lens-jade-rgb", "89, 240, 202");
+    const jadeBrightRGB = lensColorTriplet("--lens-jade-bright-rgb", "138, 255, 232");
+    const coralRGB = lensColorTriplet("--lens-coral-rgb", "255, 138, 112");
+
+    ctx.save();
+    ctx.shadowBlur = (desktopMode ? 10 : 18) + activeBoost * (desktopMode ? 10 : 18);
+    ctx.shadowColor = `rgba(${jadeRGB}, 0.72)`;
+    drawPath(time, `rgba(${jadeBrightRGB}, 0.72)`, 1.25 + activeBoost * 0.55, pulse, time * 0.00005, 7 + activeBoost * 5, baseSamples);
+    ctx.shadowColor = `rgba(${coralRGB}, 0.60)`;
+    drawPath(time, `rgba(${coralRGB}, 0.66)`, 1.1, 0.42 + activeBoost * 0.22, -time * 0.000038, 5 + activeBoost * 3, baseSamples);
+
+    const arcCount = desktopMode ? (activeBoost ? 4 : 3) : (activeBoost ? 6 : 4);
+    for (let i = 0; i < arcCount; i += 1) {
+      const start = (time * 0.00012 + i * 0.193 + noise(i, time * 0.00008) * 0.08) % 1;
+      const length = 0.035 + noise(i * 4.7, time * 0.0002) * 0.075;
+      const isCoral = i % 2 === 0;
+      ctx.shadowColor = isCoral ? `rgba(${coralRGB}, 0.82)` : `rgba(${jadeRGB}, 0.82)`;
+      drawPath(
+        time,
+        isCoral ? `rgba(${coralRGB}, 0.92)` : `rgba(${jadeBrightRGB}, 0.92)`,
+        2.2 + activeBoost * 0.65,
+        0.34 + activeBoost * 0.28,
+        0,
+        9 + activeBoost * 5,
+        arcSamples,
+        start,
+        length
+      );
+    }
+    ctx.restore();
+
+    rafId = requestAnimationFrame(frame);
+  }
+
+  target.addEventListener("focusin", () => {
+    focused = true;
+    target.classList.remove("neo-electric-border-idle");
+    target.classList.add("neo-electric-border-active");
+  });
+  target.addEventListener("focusout", () => {
+    focused = false;
+    target.classList.add("neo-electric-border-idle");
+    target.classList.remove("neo-electric-border-active");
+  });
+
+  const observer = new ResizeObserver(resize);
+  observer.observe(target);
+  resize();
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(frame);
+  decorAnimationResumeHooks.push(() => { if (!rafId) rafId = requestAnimationFrame(frame); });
+}
 }
 
 function setUpdateFeedback(message, type = "") {
@@ -5445,8 +6700,27 @@ function setEnvironmentPromptMuted(value) {
   if (els.environmentNoPromptCheck) els.environmentNoPromptCheck.checked = Boolean(value);
 }
 
+function isEnvironmentMirrorEnabled() {
+  try {
+    return localStorage.getItem(environmentMirrorStorageKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setEnvironmentMirrorEnabled(value) {
+  try {
+    if (value) localStorage.setItem(environmentMirrorStorageKey, "1");
+    else localStorage.removeItem(environmentMirrorStorageKey);
+  } catch {}
+  for (const check of [els.environmentMirrorCheck, els.environmentModalMirrorCheck]) {
+    if (check) check.checked = Boolean(value);
+  }
+}
+
 function showEnvironmentModal() {
   if (els.environmentNoPromptCheck) els.environmentNoPromptCheck.checked = isEnvironmentPromptMuted();
+  if (els.environmentModalMirrorCheck) els.environmentModalMirrorCheck.checked = isEnvironmentMirrorEnabled();
   els.environmentModal.classList.remove("hidden");
 }
 
@@ -5458,8 +6732,47 @@ function hideEnvironmentModal() {
   saveState();
 }
 
+// ── 安装自动感知：打开终端装环境后，前端轮询检测接口，装完自动刷新 ──────────
+let environmentWatchTimer = 0;
+let environmentWatchDeadline = 0;
+
+function stopEnvironmentWatch() {
+  if (environmentWatchTimer) window.clearTimeout(environmentWatchTimer);
+  environmentWatchTimer = 0;
+  environmentWatchDeadline = 0;
+}
+
+function startEnvironmentWatch() {
+  stopEnvironmentWatch();
+  environmentWatchDeadline = Date.now() + 15 * 60 * 1000;
+  const tick = async () => {
+    environmentWatchTimer = 0;
+    try {
+      const response = await fetch("/api/environment/check?fresh=1");
+      const data = await response.json();
+      if (response.ok && data.items) {
+        renderEnvironment(data);
+        const remaining = data.items.filter((item) => item.installable).length;
+        if (!remaining) {
+          setEnvironmentSummary("环境已全部补齐，可以直接使用");
+          setEnvironmentOutput("安装完成，所有环境项检测通过 ✓");
+          return;
+        }
+        setEnvironmentSummary(`正在等待终端安装完成…剩余 ${remaining} 项（自动刷新中）`);
+      }
+    } catch {}
+    if (Date.now() < environmentWatchDeadline) {
+      environmentWatchTimer = window.setTimeout(tick, 6000);
+    } else {
+      setEnvironmentOutput("自动检测已停止。安装完成后可点击“重新检测”。");
+    }
+  };
+  environmentWatchTimer = window.setTimeout(tick, 6000);
+}
+
 async function checkEnvironment(options = {}) {
   const { show = false, suppressPrompt = false } = options;
+  stopEnvironmentWatch();
   const firstRun = !state.onboardingComplete;
   if (show) showEnvironmentModal();
   setEnvironmentSummary(firstRun ? "正在进行首次部署检测" : "正在检测 neo 运行环境");
@@ -5571,13 +6884,16 @@ async function installMissingEnvironment() {
     const response = await fetch("/api/environment/install-missing", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ includeRecommended: true })
+      body: JSON.stringify({ includeRecommended: true, useMirror: isEnvironmentMirrorEnabled() })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || data.message || "启动失败");
-    setEnvironmentOutput(data.command
-      ? `${data.message}\n\n已打开终端执行环境补齐脚本。完成后请点击“重新检测”。`
-      : data.message);
+    if (data.command) {
+      setEnvironmentOutput(`${data.message}\n\n已打开终端执行环境补齐脚本，装完会自动刷新检测结果，不用手动操作。`);
+      startEnvironmentWatch();
+    } else {
+      setEnvironmentOutput(data.message);
+    }
   } catch (error) {
     setEnvironmentOutput(error.message);
   } finally {
@@ -5593,11 +6909,12 @@ async function installEnvironmentItem(item) {
     const response = await fetch("/api/environment/install", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: item.id })
+      body: JSON.stringify({ id: item.id, useMirror: isEnvironmentMirrorEnabled() })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || data.message || "安装启动失败");
-    setEnvironmentOutput(`${data.message}\n\n${data.command}`);
+    setEnvironmentOutput(`${data.message}\n\n装完会自动刷新检测结果。\n\n${data.command}`);
+    startEnvironmentWatch();
   } catch (error) {
     setEnvironmentOutput(error.message);
   }
@@ -5607,13 +6924,46 @@ els.newChatBtn.addEventListener("click", createNewConversation);
 els.toggleHistoryBtn.addEventListener("click", toggleHistory);
 els.sidebarToggleBtn?.addEventListener("click", () => setSidebarOpen(state.sidebarOpen === false));
 els.workspaceToggleBtn.addEventListener("click", () => setWorkspaceOpen(!state.workspaceOpen));
+const petEnabledToggle = document.querySelector("#petEnabledToggle");
+if (petEnabledToggle) {
+  if (window.neoDesktop?.petGetEnabled) {
+    window.neoDesktop.petGetEnabled().then((value) => {
+      petEnabledToggle.checked = Boolean(value);
+    }).catch(() => {});
+  } else {
+    petEnabledToggle.disabled = true;
+  }
+  petEnabledToggle.addEventListener("change", () => {
+    window.neoDesktop?.petSetEnabled?.(petEnabledToggle.checked);
+  });
+}
+document.querySelector("#winMinimizeBtn")?.addEventListener("click", () => window.neoDesktop?.windowControl?.("minimize"));
+document.querySelector("#winMaximizeBtn")?.addEventListener("click", () => window.neoDesktop?.windowControl?.("maximize"));
+document.querySelector("#winCloseBtn")?.addEventListener("click", () => window.neoDesktop?.windowControl?.("close"));
 els.collapseWorkspaceBtn.addEventListener("click", () => setWorkspaceOpen(false));
+els.lensHistoryBtn?.addEventListener("click", () => {
+  const nextOpen = state.sidebarOpen === false;
+  setSidebarOpen(nextOpen);
+  if (nextOpen) setWorkspaceOpen(false);
+});
+els.lensWorkspaceBtn?.addEventListener("click", () => {
+  const nextOpen = !state.workspaceOpen;
+  setWorkspaceOpen(nextOpen);
+  if (nextOpen) setSidebarOpen(false);
+});
+els.lensSettingsBtn?.addEventListener("click", () => {
+  setSidebarOpen(false);
+  setWorkspaceOpen(false);
+  toggleSettings();
+});
 els.workspaceTabs.forEach((tabButton) => {
   tabButton.addEventListener("click", () => selectWorkspaceTab(tabButton.dataset.panelTab));
 });
 els.clearTaskEventsBtn?.addEventListener("click", clearTaskEvents);
 els.retryTaskBtn?.addEventListener("click", rerunLastUserTask);
 els.clearArtifactsBtn?.addEventListener("click", clearArtifacts);
+els.refreshAuditBtn?.addEventListener("click", loadOperationLog);
+els.clearAuditBtn?.addEventListener("click", clearOperationLog);
 els.selectWorkspaceBtn?.addEventListener("click", chooseWorkspaceFolder);
 els.fileRootBtn.addEventListener("click", () => loadWorkspaceTree("."));
 els.saveFileBtn.addEventListener("click", saveCurrentFile);
@@ -5647,7 +6997,7 @@ els.saveSettingsBtn.addEventListener("click", updateSelectedProviderFromForm);
 els.addProviderBtn.addEventListener("click", addProvider);
 els.enableRecommendedSkillsBtn?.addEventListener("click", enableRecommendedSkills);
 els.testApiBtn.addEventListener("click", testCurrentApi);
-els.dismissStatusBtn.addEventListener("click", () => els.sendStatusToast.classList.add("hidden"));
+els.dismissStatusBtn?.addEventListener("click", () => els.sendStatusToast?.classList.add("hidden"));
 els.sendBtn.addEventListener("click", (event) => {
   if (!busy) return;
   event.preventDefault();
@@ -5661,6 +7011,21 @@ els.thinkingSelect?.addEventListener("change", (event) => {
   state.thinking = event.target.value;
   saveState();
   renderSelectors();
+});
+els.modelThinkingSelect?.addEventListener("change", (event) => {
+  state.thinking = event.target.value;
+  saveState();
+  renderSelectors();
+});
+els.performanceModeToggle?.addEventListener("change", (event) => {
+  state.performanceMode = event.target.checked;
+  applyPerformanceMode();
+  saveState();
+});
+els.lensThemeToggle?.addEventListener("change", (event) => {
+  state.lensTheme = event.target.checked ? "light" : "dark";
+  applyLensTheme();
+  saveState();
 });
 els.activeProviderSelect.addEventListener("change", (event) => selectActiveProvider(event.target.value));
 els.activeModelSelect.addEventListener("change", (event) => selectActiveModel(event.target.value));
@@ -5773,12 +7138,15 @@ els.promptInput.addEventListener("paste", handlePasteIntoPrompt);
 els.environmentBtn?.addEventListener("click", () => checkEnvironment({ show: true }));
 els.closeEnvironmentBtn.addEventListener("click", hideEnvironmentModal);
 els.environmentNoPromptCheck?.addEventListener("change", (event) => setEnvironmentPromptMuted(event.target.checked));
+els.environmentMirrorCheck?.addEventListener("change", (event) => setEnvironmentMirrorEnabled(event.target.checked));
+els.environmentModalMirrorCheck?.addEventListener("change", (event) => setEnvironmentMirrorEnabled(event.target.checked));
 els.installMissingEnvironmentBtn?.addEventListener("click", installMissingEnvironment);
 els.copyEnvironmentCommandBtn?.addEventListener("click", copyEnvironmentCommands);
 els.recheckEnvironmentBtn?.addEventListener("click", () => checkEnvironment({ show: false, suppressPrompt: true }));
 els.modalInstallMissingEnvironmentBtn?.addEventListener("click", installMissingEnvironment);
 els.modalCopyEnvironmentCommandBtn?.addEventListener("click", copyEnvironmentCommands);
 els.modalRecheckEnvironmentBtn?.addEventListener("click", () => checkEnvironment({ show: true }));
+document.addEventListener("pointerdown", closeFloatingSurfacesFromBlankClick, { passive: true });
 document.addEventListener("click", (event) => {
   const clickedProvider = els.activeProviderButton?.contains(event.target) || false;
   const clickedThinking = els.thinkingButton?.contains(event.target) || false;
@@ -5834,9 +7202,18 @@ window.addEventListener("resize", () => {
 
 async function initializeApp() {
   await hydrateAppState();
+  initLivingAssistantMode();
   renderAll();
+  applyPerformanceMode();
+  applyLensTheme();
   initAmbientMotion();
+  initBorderGlow();
+  initLensStageInteraction();
+  initLensCursorParticles();
+  initNeoElectricBorders();
   if (state.workspaceTab === "files") loadWorkspaceTree(state.workspacePath || ".");
+  if (state.workspaceTab === "audit") loadOperationLog();
+  setEnvironmentMirrorEnabled(isEnvironmentMirrorEnabled());
   checkHealth();
   refreshUpdateStatus({ silent: true });
   checkEnvironment();
@@ -6100,7 +7477,7 @@ if (state.schedulePanelOpen && els.scheduleSidePanel) {
 
 const PETDEX_PAGE_SIZE = 30;
 const PETDEX_API = "/api/petdex/pets";
-const PETDEX_LEGACY_SPRITE_BASE = "https://petdex.crafter.run/pets";
+const PETDEX_LEGACY_SPRITE_BASE = "https://assets.petdex.dev/curated";
 const PETDEX_DEFAULT_ANIMATION = { row: 0, frames: 6, durationMs: 1100 };
 const PETDEX_STATE_ANIMATIONS = {
   idle:      { row: 0, frames: 6, durationMs: 1100 },
@@ -6481,6 +7858,11 @@ async function loadPetdexPets({ refresh = false } = {}) {
       ? data.pets.map(normalizePetdexSourcePet).filter(Boolean)
       : [];
     petdexLoaded = true;
+    // 源迁移后存档里的资产地址可能已失效：用最新清单刷新当前选中宠物的地址
+    if (state.petdexSlug) {
+      const fresh = findPetdexPet(state.petdexSlug);
+      if (fresh && fresh.spritesheetUrl !== (state.petdexPet?.spritesheetUrl || "")) applyPetdexSlug(fresh);
+    }
     applyPetdexFilter(searchInput?.value || "");
     const sourceHint = data.stale ? " · 使用缓存" : "";
     if (statusEl) statusEl.textContent = `共 ${petdexFiltered.length} / ${petdexAllPets.length} 只宠物${sourceHint}`;

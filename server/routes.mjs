@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { ctx, rootDir } from "./context.mjs";
+import { resolveCommandApproval } from "./command-approval.mjs";
 import {
   listSchedules, createSchedule, updateSchedule, deleteSchedule,
   runScheduleNow, scheduleExprLabel, computeNextRun
@@ -18,7 +19,7 @@ import {
   openPathFallback
 } from "./tools.mjs";
 import {
-  normalizeMessages, providerSupportsImageInput, stripImagePartsForTextOnly,
+  normalizeMessages, capMessageHistory, providerSupportsImageInput, stripImagePartsForTextOnly,
   providerRequestInfo, callOpenAICompatible, callAnthropic, callGemini, callMock
 } from "./api.mjs";
 import {
@@ -30,10 +31,12 @@ import {
 import {
   detectEnvironment, invalidateEnvCache, buildInstallMissingScript, buildSingleInstallScript, openTerminalCommand
 } from "./environment.mjs";
+import { readOperationLog, clearOperationLog, operationLogPath } from "./operation-log.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const require = createRequire(import.meta.url);
-const { version: appVersion = "0.0.0" } = require("../package.json");
+const { version: packageVersion = "0.0.0", displayVersion } = require("../package.json");
+const appVersion = displayVersion || packageVersion;
 const defaultAttachmentMaxBytes = 8 * 1024 * 1024;
 const officeAttachmentMaxBytes = 25 * 1024 * 1024;
 const officeAttachmentExts = new Set([".xlsx", ".xlsm", ".csv", ".tsv", ".docx", ".pdf", ".pptx", ".xls", ".doc", ".ppt"]);
@@ -78,7 +81,8 @@ export async function readBody(req) {
   catch { const e = new Error("请求体不是合法 JSON"); e.status = 400; throw e; }
 }
 
-const PETDEX_MANIFEST_URL = "https://petdex.crafter.run/api/manifest";
+// petdex.crafter.run 已迁移到 petdex.dev，旧域名的 API 返回 403
+const PETDEX_MANIFEST_URL = "https://petdex.dev/api/manifest";
 const PETDEX_CACHE_MS = 10 * 60 * 1000;
 let petdexManifestCache = null;
 
@@ -156,6 +160,19 @@ async function writePersistedAppState(state) {
   return true;
 }
 
+function modelRequestErrorMessage(error, requestInfo = {}) {
+  const raw = String(error?.message || "模型请求失败").trim();
+  const provider = requestInfo.provider || "当前供应商";
+  const model = requestInfo.model || "当前模型";
+  const target = `${provider} · ${model}`;
+  const status = error?.status ? `HTTP ${error.status}` : "";
+  const authFailed = error?.status === 401 || error?.status === 403 || /auth|authentication|api[ _-]?key|unauthorized|forbidden|认证|鉴权|密钥/i.test(raw);
+  if (authFailed) {
+    return `${target} 认证失败：${raw}${status ? `（${status}）` : ""}。请检查这个供应商自己的 API Key 和 Base URL。`;
+  }
+  return `${target} 请求失败：${raw}${status ? `（${status}）` : ""}`;
+}
+
 // ── 路由处理函数 ─────────────────────────────────────────────────────────────
 
 export async function handleChat(req, res) {
@@ -179,7 +196,8 @@ export async function handleChat(req, res) {
 
   const responsesMode = isOpenAIResponsesMode(provider);
   const protocol = responsesMode ? "openai-responses" : provider.protocol || "openai";
-  const requestMessages = providerSupportsImageInput(provider, model) ? messages : stripImagePartsForTextOnly(messages);
+  const visionAdjusted = providerSupportsImageInput(provider, model) ? messages : stripImagePartsForTextOnly(messages);
+  const requestMessages = capMessageHistory(visionAdjusted);
   const requestInfo = responsesMode
     ? { ...providerRequestInfo(provider, protocol, model, thinking), endpoint: openAIResponsesEndpoint(provider) }
     : providerRequestInfo(provider, protocol, model, thinking);
@@ -207,20 +225,51 @@ export async function handleChat(req, res) {
       } else if (protocol === "gemini") {
         await streamGemini({ provider, model, messages: requestMessages, temperature, maxTokens, enableTools, enabledSkills, toolConsent, signal: clientAbort.signal, res, requestInfo });
       } else {
-        await streamOpenAICompatible({ provider, model, messages: requestMessages, temperature, maxTokens, enableTools, enabledSkills, toolConsent, signal: clientAbort.signal, res, requestInfo });
+        await streamOpenAICompatible({ provider, model, messages: requestMessages, temperature, maxTokens, thinking, enableTools, enabledSkills, toolConsent, signal: clientAbort.signal, res, requestInfo });
       }
     } catch (err) {
-      sseError(res, err.message || "流式请求失败");
+      sseError(res, modelRequestErrorMessage(err, requestInfo));
     }
     return;
   }
 
-  let result;
-  if (responsesMode) result = await callOpenAIResponses({ provider, model, messages: requestMessages, temperature, maxTokens, enableTools, enabledSkills, toolConsent, signal: clientAbort.signal });
-  else if (protocol === "anthropic") result = await callAnthropic({ provider, model, messages: requestMessages, temperature, maxTokens, signal: clientAbort.signal });
-  else if (protocol === "gemini") result = await callGemini({ provider, model, messages: requestMessages, temperature, maxTokens, signal: clientAbort.signal });
-  else result = await callOpenAICompatible({ provider, model, messages: requestMessages, temperature, maxTokens, enableTools, enabledSkills, toolConsent, signal: clientAbort.signal });
-  sendJson(res, 200, { ok: true, request: requestInfo, ...result });
+  try {
+    let result;
+    if (responsesMode) result = await callOpenAIResponses({ provider, model, messages: requestMessages, temperature, maxTokens, enableTools, enabledSkills, toolConsent, signal: clientAbort.signal });
+    else if (protocol === "anthropic") result = await callAnthropic({ provider, model, messages: requestMessages, temperature, maxTokens, signal: clientAbort.signal });
+    else if (protocol === "gemini") result = await callGemini({ provider, model, messages: requestMessages, temperature, maxTokens, signal: clientAbort.signal });
+    else result = await callOpenAICompatible({ provider, model, messages: requestMessages, temperature, maxTokens, thinking, enableTools, enabledSkills, toolConsent, signal: clientAbort.signal });
+    sendJson(res, 200, { ok: true, request: requestInfo, ...result });
+  } catch (err) {
+    sendJson(res, err.status || 500, { ok: false, error: modelRequestErrorMessage(err, requestInfo), request: requestInfo, details: err.data || null });
+  }
+}
+
+export async function handleCommandConfirm(req, res) {
+  const body = await readBody(req);
+  const id = String(body?.id || "");
+  if (!id) { sendJson(res, 400, { ok: false, error: "缺少待确认命令 id" }); return; }
+  const resolved = resolveCommandApproval(id, Boolean(body?.approved));
+  sendJson(res, 200, { ok: true, resolved });
+}
+
+const workspaceInstructionFiles = ["AGENTS.md", "neo.md"];
+const workspaceInstructionMaxBytes = 8 * 1024;
+
+export async function handleWorkspaceInstructions(req, res) {
+  for (const name of workspaceInstructionFiles) {
+    const target = path.join(ctx.workspaceRoot, name);
+    if (!existsSync(target)) continue;
+    try {
+      const raw = await readFile(target, "utf8");
+      const truncated = raw.length > workspaceInstructionMaxBytes;
+      sendJson(res, 200, { ok: true, source: name, truncated, content: truncated ? raw.slice(0, workspaceInstructionMaxBytes) : raw });
+      return;
+    } catch {
+      break;
+    }
+  }
+  sendJson(res, 200, { ok: true, source: "", truncated: false, content: "" });
 }
 
 export async function handleTree(req, res, url) {
@@ -374,19 +423,34 @@ export async function handleWriteAppState(req, res) {
   sendJson(res, 200, { ok: true, persisted: await writePersistedAppState(state) });
 }
 
+export async function handleOperationLog(req, res, url) {
+  const limit = Number(url.searchParams.get("limit") || 200);
+  const entries = await readOperationLog({ limit });
+  sendJson(res, 200, { ok: true, entries, path: operationLogPath() });
+}
+
+export async function handleOperationLogClear(req, res) {
+  const cleared = await clearOperationLog();
+  sendJson(res, 200, { ok: cleared });
+}
+
 export async function handleEnvironmentCheck(req, res) {
+  // fresh=1：跳过 30s 缓存，安装进行中前端轮询用它拿实时状态
+  const fresh = new URL(req.url || "/", "http://localhost").searchParams.get("fresh") === "1";
+  if (fresh) invalidateEnvCache();
   sendJson(res, 200, await detectEnvironment());
 }
 
 export async function handleEnvironmentInstall(req, res) {
   const body = await readBody(req);
   const id = String(body.id || "");
+  const useMirror = body.useMirror === true;
   const env = await detectEnvironment();
   const item = env.items.find((i) => i.id === id);
   if (!item) throw Object.assign(new Error("未知环境项"), { status: 404 });
   if (!item.installable || !item.installCommand) throw Object.assign(new Error("这个环境项不支持自动安装，或已经安装完成"), { status: 400 });
   if (process.platform === "darwin" && id !== "homebrew" && id !== "desktop-deps" && !env.items.find((i) => i.id === "homebrew")?.path) throw Object.assign(new Error("请先安装 Homebrew，再补充这个环境"), { status: 400 });
-  const command = buildSingleInstallScript(env, item);
+  const command = buildSingleInstallScript(env, item, useMirror);
   const result = await openTerminalCommand(command);
   if (result.ok) invalidateEnvCache();
   sendJson(res, result.ok ? 200 : 500, { ok: result.ok, message: result.message, command: result.command, stdout: result.stdout || "", stderr: result.stderr || "" });
@@ -395,8 +459,9 @@ export async function handleEnvironmentInstall(req, res) {
 export async function handleEnvironmentInstallMissing(req, res) {
   const body = await readBody(req);
   const includeRecommended = body.includeRecommended !== false;
+  const useMirror = body.useMirror === true;
   const env = await detectEnvironment();
-  const script = buildInstallMissingScript(env, includeRecommended);
+  const script = buildInstallMissingScript(env, includeRecommended, useMirror);
   if (!script) { sendJson(res, 200, { ok: true, message: "当前没有需要自动补齐的环境项", command: "" }); return; }
   const result = await openTerminalCommand(script);
   if (result.ok) invalidateEnvCache();
@@ -491,6 +556,19 @@ async function serveStatic(req, res, url) {
   res.end(content);
 }
 
+async function serveVendorAsset(req, res, url) {
+  if (!url.pathname.startsWith("/vendor/three/")) return false;
+  const relPath = decodeURIComponent(url.pathname.slice("/vendor/three/".length));
+  const vendorRoot = path.join(rootDir, "node_modules", "three", "build");
+  const target = path.resolve(vendorRoot, relPath);
+  if (target !== vendorRoot && !target.startsWith(`${vendorRoot}${path.sep}`)) { sendText(res, 403, "Forbidden"); return true; }
+  if (!existsSync(target)) { sendText(res, 404, "Vendor asset not found"); return true; }
+  const content = await readFile(target);
+  res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+  res.end(content);
+  return true;
+}
+
 // ── HTTP 服务器 ───────────────────────────────────────────────────────────────
 
 export function createNeoServer() {
@@ -500,6 +578,10 @@ export function createNeoServer() {
       if (req.method === "GET" && url.pathname === "/api/health") { sendJson(res, 200, { ok: true, name: "neo", version: appVersion, platform: process.platform, workspace: ctx.workspaceRoot, workspaceName: path.basename(ctx.workspaceRoot) || ctx.workspaceRoot, desktopMode: ctx.desktopMode, statePersistence: Boolean(ctx.appStatePath) }); return; }
       if (req.method === "GET" && url.pathname === "/api/app-state") { await handleReadAppState(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/app-state") { await handleWriteAppState(req, res); return; }
+      if (url.pathname === "/api/operation-log") {
+        if (req.method === "GET") { await handleOperationLog(req, res, url); return; }
+        if (req.method === "DELETE") { await handleOperationLogClear(req, res); return; }
+      }
       if (req.method === "GET" && url.pathname === "/api/environment/check") { await handleEnvironmentCheck(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/environment/install") { await handleEnvironmentInstall(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/environment/install-missing") { await handleEnvironmentInstallMissing(req, res); return; }
@@ -518,6 +600,8 @@ export function createNeoServer() {
       if (req.method === "GET" && url.pathname === "/api/pet/stream") { handlePetStateStream(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/chat") { await handleChat(req, res); return; }
       if (req.method === "GET" && url.pathname === "/api/workspace/tree") { await handleTree(req, res, url); return; }
+      if (req.method === "GET" && url.pathname === "/api/workspace/instructions") { await handleWorkspaceInstructions(req, res); return; }
+      if (req.method === "POST" && url.pathname === "/api/command-confirm") { await handleCommandConfirm(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/workspace/select-folder") { await handleSelectWorkspace(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/workspace/select-external-paths") { await handleSelectExternalPaths(req, res); return; }
       if (req.method === "GET" && url.pathname === "/api/workspace/file") { await handleReadFile(req, res, url); return; }
@@ -529,6 +613,7 @@ export function createNeoServer() {
       if (req.method === "POST" && url.pathname === "/api/workspace/generate-file") { await handleGenerateFile(req, res); return; }
       if (req.method === "POST" && url.pathname === "/api/workspace/open") { await handleOpenWorkspacePath(req, res, false); return; }
       if (req.method === "POST" && url.pathname === "/api/workspace/reveal") { await handleOpenWorkspacePath(req, res, true); return; }
+      if (req.method === "GET" && await serveVendorAsset(req, res, url)) return;
       if (req.method === "GET") { await serveStatic(req, res, url); return; }
       sendText(res, 405, "Method not allowed");
     } catch (error) {
